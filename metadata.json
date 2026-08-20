@@ -1,0 +1,11 @@
+{
+  "name": "HerbMap Tam Anh",
+  "description": "Bản đồ số và cơ sở dữ liệu không gian cây thuốc dân gian phục vụ nhận diện, giáo dục và bảo tồn tại xã Tam Anh.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
