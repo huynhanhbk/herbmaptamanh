@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, 
   Camera, 
@@ -12,7 +12,9 @@ import {
   FileText,
   TreePine,
   Layers,
-  Search
+  Search,
+  ScanLine,
+  Image as ImageIcon
 } from 'lucide-react';
 import { AICandidate, AIIdentificationResult, MedicinalPlant } from '../types';
 
@@ -35,26 +37,66 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
   const [mimeType, setMimeType] = useState<string>('image/jpeg');
   const [userNotes, setUserNotes] = useState<string>('');
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [analysisStep, setAnalysisStep] = useState<string>('Đang khởi tạo...');
   const [analysisResult, setAnalysisResult] = useState<AIIdentificationResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  if (!isOpen) return null;
+  // Resize and compress image using HTML5 Canvas
+  const resizeAndProcessImage = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_DIM || height > MAX_DIM) {
+          if (width > height) {
+            height = Math.round((height * MAX_DIM) / width);
+            width = MAX_DIM;
+          } else {
+            width = Math.round((width * MAX_DIM) / height);
+            height = MAX_DIM;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setSelectedImage(compressedDataUrl);
+          setMimeType('image/jpeg');
+          setAnalysisResult(null);
+          setErrorMsg(null);
+        } else {
+          setSelectedImage(event.target?.result as string);
+          setMimeType(file.type || 'image/jpeg');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    resizeAndProcessImage(file);
+  };
 
-    setMimeType(file.type || 'image/jpeg');
-    const reader = new FileReader();
-    reader.onload = () => {
-      setSelectedImage(reader.result as string);
-      setAnalysisResult(null);
-      setErrorMsg(null);
-    };
-    reader.readAsDataURL(file);
+  const handleSelectPresetSample = (plant: MedicinalPlant) => {
+    setSelectedImage(plant.coverImage);
+    setMimeType('image/jpeg');
+    setUserNotes(`Cây thuốc ghi nhận tại ${plant.location.communeSection}, thuộc họ ${plant.family}.`);
+    setAnalysisResult(null);
+    setErrorMsg(null);
   };
 
   const handleStartIdentification = async () => {
@@ -65,6 +107,15 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
 
     setIsAnalyzing(true);
     setErrorMsg(null);
+    setAnalysisStep('Đang mã hóa dữ liệu hình ảnh...');
+
+    const stepTimer1 = setTimeout(() => {
+      setAnalysisStep('Đang gửi tới mô hình thị giác AI Gemini Vision...');
+    }, 600);
+
+    const stepTimer2 = setTimeout(() => {
+      setAnalysisStep('Đang phân tích hình thái lá, thân, hoa và đối chiếu CSDL Tam Anh...');
+    }, 1500);
 
     try {
       const response = await fetch('/api/identify-plant', {
@@ -87,6 +138,8 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
       console.error('AI identification error:', err);
       setErrorMsg(err.message || 'Lỗi kết nối tới mô hình AI. Vui lòng thử lại với ảnh rõ nét hơn.');
     } finally {
+      clearTimeout(stepTimer1);
+      clearTimeout(stepTimer2);
       setIsAnalyzing(false);
     }
   };
@@ -113,11 +166,13 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
     setUserNotes('');
   };
 
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
       <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden border border-stone-200 flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="bg-gradient-to-r from-emerald-900 to-teal-900 text-white px-5 py-4 flex items-center justify-between border-b border-emerald-800">
+        <div className="bg-gradient-to-r from-emerald-900 via-stone-900 to-teal-900 text-white px-5 py-4 flex items-center justify-between border-b border-emerald-800">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-emerald-700/80 flex items-center justify-center shadow-xs">
               <Sparkles className="w-5 h-5 text-amber-300 animate-pulse" />
@@ -158,12 +213,12 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
 
           {/* Upload / Capture Section if no image */}
           {!selectedImage ? (
-            <div className="space-y-4">
+            <div className="space-y-5">
               <div 
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-stone-300 hover:border-emerald-500 bg-stone-50/80 hover:bg-emerald-50/30 rounded-3xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 group"
+                className="border-2 border-dashed border-emerald-300/80 hover:border-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/40 rounded-3xl p-8 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 group"
               >
-                <div className="w-14 h-14 rounded-2xl bg-emerald-100 group-hover:bg-emerald-200 text-emerald-700 flex items-center justify-center transition-colors">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-100 group-hover:bg-emerald-200 text-emerald-700 flex items-center justify-center transition-colors shadow-xs">
                   <Upload className="w-7 h-7" />
                 </div>
                 <div>
@@ -171,7 +226,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                     Bấm để tải ảnh cây thuốc lên
                   </h4>
                   <p className="text-xs text-stone-500 mt-1">
-                    Hỗ trợ định dạng JPG, PNG (khuyên dùng ảnh rõ nét hoa, lá, quả)
+                    Hỗ trợ định dạng JPG, PNG (tự động tối ưu dung lượng ảnh)
                   </p>
                 </div>
               </div>
@@ -180,7 +235,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => cameraInputRef.current?.click()}
-                  className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-950/20 transition-all hover:scale-[1.02]"
+                  className="flex items-center justify-center gap-2 p-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-950/20 transition-all hover:scale-[1.02] active:scale-95"
                 >
                   <Camera className="w-4 h-4" />
                   <span>Chụp ảnh trực tiếp</span>
@@ -194,6 +249,38 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                   <span>Chọn từ thư viện ảnh</span>
                 </button>
               </div>
+
+              {/* Quick sample test images */}
+              {existingPlants.length > 0 && (
+                <div className="pt-3 border-t border-stone-200">
+                  <p className="text-xs font-semibold text-stone-600 mb-2 flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Hoặc thử nhanh với mẫu ảnh cây thuốc thực địa Tam Anh:</span>
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {existingPlants.slice(0, 3).map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleSelectPresetSample(p)}
+                        className="group flex flex-col items-center text-left p-2 rounded-xl bg-stone-50 hover:bg-emerald-50 border border-stone-200 hover:border-emerald-300 transition-all"
+                      >
+                        <img
+                          src={p.coverImage}
+                          alt={p.vietnameseName}
+                          className="w-full h-16 object-cover rounded-lg mb-1.5 group-hover:scale-105 transition-transform"
+                        />
+                        <span className="text-[11px] font-bold text-stone-800 group-hover:text-emerald-700 line-clamp-1">
+                          {p.vietnameseName}
+                        </span>
+                        <span className="text-[9px] text-stone-500 font-mono">
+                          {p.id}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Hidden file inputs */}
               <input
@@ -222,13 +309,21 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                     alt="Cây thuốc cần nhận diện"
                     className="w-full h-full object-cover"
                   />
-                  <button
-                    onClick={handleReset}
-                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-                    title="Đổi ảnh khác"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  {isAnalyzing && (
+                    <div className="absolute inset-0 bg-emerald-950/40 backdrop-blur-[1px] flex flex-col items-center justify-center text-white p-3 text-center animate-pulse">
+                      <ScanLine className="w-10 h-10 text-emerald-400 animate-bounce mb-2" />
+                      <span className="text-xs font-bold">{analysisStep}</span>
+                    </div>
+                  )}
+                  {!isAnalyzing && (
+                    <button
+                      onClick={handleReset}
+                      className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
+                      title="Đổi ảnh khác"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 <div className="sm:col-span-7 space-y-3">
@@ -241,6 +336,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                       onChange={(e) => setUserNotes(e.target.value)}
                       placeholder="Ví dụ: Cây mọc bờ rào ven suối thôn Đức Bố, thân leo có gai quặp, hoa màu tím nhạt..."
                       className="w-full text-xs p-2.5 rounded-xl border border-stone-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none h-20 bg-stone-50"
+                      disabled={isAnalyzing}
                     />
                   </div>
 
@@ -253,7 +349,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                       {isAnalyzing ? (
                         <>
                           <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Đang đối chiếu dữ liệu thực vật học...</span>
+                          <span>{analysisStep}</span>
                         </>
                       ) : (
                         <>
@@ -277,8 +373,11 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
               {/* AI Analysis Result Display */}
               {analysisResult && (
                 <div className="space-y-4 pt-2 border-t border-stone-200">
-                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 text-xs">
-                    <span className="font-bold text-stone-900 block mb-0.5">🔍 Nhận định hình thái từ AI:</span>
+                  <div className="bg-emerald-50/80 p-3.5 rounded-2xl border border-emerald-200 text-xs space-y-1">
+                    <div className="flex items-center gap-1.5 text-emerald-900 font-bold">
+                      <Sparkles className="w-4 h-4 text-emerald-600" />
+                      <span>Kết quả nhận định hình thái học từ AI:</span>
+                    </div>
                     <p className="text-stone-700 leading-relaxed">{analysisResult.summary}</p>
                   </div>
 
@@ -395,7 +494,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
         {/* Footer */}
         <div className="bg-stone-50 px-5 py-3 border-t border-stone-200 flex items-center justify-between">
           <span className="text-[11px] text-stone-500">
-            Hỗ trợ nhận diện AI đa phương thức
+            Hỗ trợ nhận diện AI đa phương thức & CSDL thực địa
           </span>
           <button
             onClick={onClose}

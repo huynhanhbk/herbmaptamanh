@@ -27,17 +27,54 @@ export function savePlants(plants: MedicinalPlant[]): void {
   }
 }
 
-export function addPlant(plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'>): MedicinalPlant {
+export function addPlant(
+  plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
+  explicitSpeciesId?: string
+): MedicinalPlant {
   const currentPlants = getStoredPlants();
-  const nextNumber = currentPlants.length + 1;
-  const newId = `TA-HERB-${String(nextNumber).padStart(3, '0')}`;
   
+  // 1. Check if an explicit species ID was selected (e.g. 'TA-HERB-001')
+  let assignedId = explicitSpeciesId?.trim() || plant.id?.trim();
+
+  // 2. If not explicitly provided, look up if a plant with the same Vietnamese name or scientific name exists
+  if (!assignedId) {
+    const inputName = plant.vietnameseName.trim().toLowerCase();
+    const inputSciName = plant.scientificName?.trim().toLowerCase();
+
+    const matchedPlant = currentPlants.find((p) => {
+      const existingName = p.vietnameseName.trim().toLowerCase();
+      const existingSciName = p.scientificName.trim().toLowerCase();
+      return (
+        existingName === inputName ||
+        (inputSciName && inputSciName !== 'đang xác minh phân loại học' && existingSciName === inputSciName)
+      );
+    });
+
+    if (matchedPlant) {
+      assignedId = matchedPlant.id;
+    }
+  }
+
+  // 3. If it is a completely new species, generate the next sequential identifier (TA-HERB-XXX)
+  if (!assignedId) {
+    let maxNum = 0;
+    currentPlants.forEach((p) => {
+      const match = p.id.match(/TA-HERB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    assignedId = `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
+  }
+
+  const now = new Date().toISOString();
   const newPlant: MedicinalPlant = {
     ...plant,
-    id: newId,
+    id: assignedId,
     surveyFrequencyCount: 1,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   };
 
   const updated = [newPlant, ...currentPlants];
@@ -45,13 +82,21 @@ export function addPlant(plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updat
   return newPlant;
 }
 
-export function saveNewPlant(plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'>): MedicinalPlant[] {
-  addPlant(plant);
+export function saveNewPlant(
+  plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
+  explicitSpeciesId?: string
+): MedicinalPlant[] {
+  addPlant(plant, explicitSpeciesId);
   return getStoredPlants();
 }
 
 export function updatePlantStatus(id: string, status: 'verified' | 'pending'): MedicinalPlant[] {
   updatePlant(id, { status });
+  return getStoredPlants();
+}
+
+export function saveUpdatedPlant(id: string, updates: Partial<MedicinalPlant>): MedicinalPlant[] {
+  updatePlant(id, updates);
   return getStoredPlants();
 }
 

@@ -20,6 +20,7 @@ import {
   Compass,
   X
 } from 'lucide-react';
+import { matchPlantSearch } from '../utils/searchHelper';
 
 interface CatalogListProps {
   plants: MedicinalPlant[];
@@ -45,17 +46,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
   // Filtered plants
   const filteredPlants = useMemo(() => {
     return plants.filter((plant) => {
-      // Search query filter
+      // Smart exact & approximate search query filter
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchName = plant.vietnameseName.toLowerCase().includes(q);
-        const matchSci = plant.scientificName.toLowerCase().includes(q);
-        const matchFamily = plant.family.toLowerCase().includes(q);
-        const matchHabitat = plant.habitat.toLowerCase().includes(q);
-        const matchRemedies = plant.traditionalUses.folkRemedies.some((r) => r.toLowerCase().includes(q));
-        const matchId = plant.id.toLowerCase().includes(q);
-
-        if (!matchName && !matchSci && !matchFamily && !matchHabitat && !matchRemedies && !matchId) {
+        if (!matchPlantSearch(plant, searchQuery)) {
           return false;
         }
       }

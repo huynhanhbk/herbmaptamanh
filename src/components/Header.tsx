@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Compass, 
   ListFilter, 
@@ -13,8 +13,13 @@ import {
   X,
   Leaf,
   Info,
-  ShieldCheck
+  ShieldCheck,
+  MapPin,
+  ExternalLink,
+  ChevronRight
 } from 'lucide-react';
+import { MedicinalPlant } from '../types';
+import { searchPlants } from '../utils/searchHelper';
 
 interface HeaderProps {
   activeTab: 'map' | 'catalog' | 'dashboard' | 'admin';
@@ -30,6 +35,8 @@ interface HeaderProps {
   onLogoutAdmin: () => void;
   totalPlantsCount: number;
   pendingCount: number;
+  plants?: MedicinalPlant[];
+  onSelectPlant?: (plant: MedicinalPlant) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,9 +53,51 @@ export const Header: React.FC<HeaderProps> = ({
   onLogoutAdmin,
   totalPlantsCount,
   pendingCount,
+  plants = [],
+  onSelectPlant,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSearchOpenMobile, setIsSearchOpenMobile] = useState(false);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+
+  // Compute matched plants in real-time
+  const searchResults = searchQuery.trim() ? searchPlants(plants, searchQuery) : [];
+
+  // Close search dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleSelectSearchResult = (plant: MedicinalPlant) => {
+    setIsSearchFocused(false);
+    setIsSearchOpenMobile(false);
+    if (onSelectPlant) {
+      onSelectPlant(plant);
+    }
+  };
+
+  const handleViewAllInCatalog = () => {
+    setIsSearchFocused(false);
+    setIsSearchOpenMobile(false);
+    setActiveTab('catalog');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      if (searchResults.length === 1 && onSelectPlant) {
+        handleSelectSearchResult(searchResults[0]);
+      } else {
+        handleViewAllInCatalog();
+      }
+    }
+  };
 
   return (
     <header className="sticky top-0 z-40 bg-stone-900/95 backdrop-blur-md border-b border-stone-800/90 text-stone-100 shadow-md">
@@ -140,13 +189,18 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2">
             
             {/* Quick Search bar (Desktop) */}
-            <div className="hidden xl:flex items-center relative w-48 2xl:w-56">
+            <div ref={searchContainerRef} className="hidden lg:flex items-center relative w-48 xl:w-60 2xl:w-72">
               <Search className="w-3.5 h-3.5 absolute left-3 text-stone-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm cây thuốc..."
+                onFocus={() => setIsSearchFocused(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchFocused(true);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Tìm tên cây thuốc, công dụng..."
                 className="w-full bg-stone-950/70 hover:bg-stone-950 text-xs text-stone-100 pl-8 pr-7 py-1.5 rounded-xl border border-stone-800 focus:outline-none focus:border-emerald-500 placeholder-stone-500 transition-colors"
               />
               {searchQuery && (
@@ -156,6 +210,71 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
+              )}
+
+              {/* Desktop Live Search Dropdown */}
+              {isSearchFocused && searchQuery.trim() && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl overflow-hidden z-50 animate-fadeIn min-w-[340px] -left-12">
+                  <div className="p-2.5 bg-stone-950/80 border-b border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
+                    <span>Kết quả tìm kiếm ({searchResults.length})</span>
+                    <button
+                      onClick={handleViewAllInCatalog}
+                      className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-0.5"
+                    >
+                      <span>Mở Danh lục</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-stone-800/80">
+                    {searchResults.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-stone-400 space-y-1">
+                        <p>Không tìm thấy cây thuốc khớp với "<span className="text-stone-200 font-medium">{searchQuery}</span>"</p>
+                        <p className="text-[11px] text-stone-500">Mẹo: Thử tìm không dấu (ví dụ: "ca gai leo", "viem gan", "duc bo")</p>
+                      </div>
+                    ) : (
+                      searchResults.slice(0, 6).map((plant) => (
+                        <div
+                          key={plant.id}
+                          onClick={() => handleSelectSearchResult(plant)}
+                          className="p-2.5 hover:bg-stone-800/80 transition-colors cursor-pointer flex items-center gap-3 group"
+                        >
+                          <img
+                            src={plant.coverImage}
+                            alt={plant.vietnameseName}
+                            className="w-10 h-10 rounded-lg object-cover border border-stone-700 shrink-0 group-hover:scale-105 transition-transform"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-white group-hover:text-emerald-300 transition-colors truncate">
+                                {plant.vietnameseName}
+                              </span>
+                              <span className="font-mono text-[9px] text-stone-400 px-1.5 py-0.2 rounded bg-stone-800 shrink-0">
+                                {plant.id}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-stone-400 italic font-serif truncate">
+                              {plant.scientificName} • <span className="not-italic text-stone-500">{plant.family}</span>
+                            </p>
+                            <p className="text-[10px] text-stone-400 truncate mt-0.5">
+                              📍 {plant.location.communeSection} {plant.traditionalUses.folkRemedies[0] ? `• ${plant.traditionalUses.folkRemedies[0]}` : ''}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-stone-500 group-hover:text-emerald-400 shrink-0" />
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {searchResults.length > 6 && (
+                    <div
+                      onClick={handleViewAllInCatalog}
+                      className="p-2 text-center bg-stone-950 hover:bg-stone-800 text-xs text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer border-t border-stone-800 transition-colors"
+                    >
+                      Xem toàn bộ {searchResults.length} kết quả trong Danh lục →
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 
@@ -240,13 +359,14 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Mobile Search Overlay Bar */}
         {isSearchOpenMobile && (
-          <div className="xl:hidden py-2 px-1 border-t border-stone-800/80 animate-fadeIn">
+          <div className="xl:hidden py-2 px-1 border-t border-stone-800/80 animate-fadeIn space-y-2">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-2.5 text-stone-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
                 placeholder="Tìm tên cây thuốc, họ thực vật, công dụng..."
                 className="w-full bg-stone-950 text-xs text-stone-100 pl-9 pr-8 py-2 rounded-xl border border-stone-700 focus:outline-none focus:border-emerald-500"
                 autoFocus
@@ -260,6 +380,45 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
             </div>
+
+            {/* Mobile search results preview */}
+            {searchQuery.trim() && (
+              <div className="bg-stone-950 border border-stone-800 rounded-2xl overflow-hidden max-h-60 overflow-y-auto divide-y divide-stone-800">
+                <div className="p-2 bg-stone-900 flex items-center justify-between text-[11px] text-stone-400">
+                  <span>Tìm thấy {searchResults.length} cây thuốc</span>
+                  <button
+                    onClick={handleViewAllInCatalog}
+                    className="text-emerald-400 font-semibold"
+                  >
+                    Xem tất cả trong Danh lục →
+                  </button>
+                </div>
+                {searchResults.length === 0 ? (
+                  <div className="p-3 text-center text-xs text-stone-400">
+                    Không tìm thấy loài cây phù hợp với "{searchQuery}"
+                  </div>
+                ) : (
+                  searchResults.slice(0, 5).map((plant) => (
+                    <div
+                      key={plant.id}
+                      onClick={() => handleSelectSearchResult(plant)}
+                      className="p-2 flex items-center gap-2.5 active:bg-stone-800"
+                    >
+                      <img
+                        src={plant.coverImage}
+                        alt={plant.vietnameseName}
+                        className="w-8 h-8 rounded-lg object-cover border border-stone-800 shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-xs text-stone-200 truncate">{plant.vietnameseName}</p>
+                        <p className="text-[10px] text-stone-400 italic truncate">{plant.scientificName}</p>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
 

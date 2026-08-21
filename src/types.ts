@@ -1,6 +1,8 @@
 export type HabitatCategory = 'forest' | 'garden' | 'stream' | 'hill' | 'coastal' | 'red';
 
-export type ConservationLevel = 'safe' | 'vulnerable' | 'endangered' | 'rare';
+export type ConservationLevel = 'safe' | 'vulnerable' | 'endangered';
+
+export type UnifiedConservationStatus = 'An toàn' | 'Sắp nguy cấp' | 'Nguy cấp / Cần bảo tồn';
 
 export type DataSourceType = 'research_heritage' | 'field_survey_2026' | 'community_contribution';
 
@@ -58,7 +60,7 @@ export interface MedicinalPlant {
   habitat: string;
   habitatCategory: HabitatCategory;
   location: LocationData;
-  conservationStatus: 'Ít quan tâm' | 'Sắp bị đe dọa' | 'Sẽ nguy cấp' | 'Nguy cấp (Cần bảo tồn)' | 'Hiếm gặp tại địa phương';
+  conservationStatus: UnifiedConservationStatus;
   conservationLevel: ConservationLevel;
   traditionalUses: TraditionalUses;
   dataSource: DataSource;

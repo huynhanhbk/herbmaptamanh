@@ -44,7 +44,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
   // Filters inside map view
   const [selectedHabitat, setSelectedHabitat] = useState<'all' | HabitatCategory>('all');
-  const [selectedConservation, setSelectedConservation] = useState<'all' | ConservationLevel>('all');
+  const [selectedConservation, setSelectedConservation] = useState<'all' | ConservationLevel | 'pending'>('all');
   const [showOnlyVerified, setShowOnlyVerified] = useState<boolean>(false);
   const [mapTileLayer, setMapTileLayer] = useState<'osm' | 'topo'>('osm');
   const [locatingUser, setLocatingUser] = useState(false);
@@ -125,17 +125,15 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     let borderColor = 'border-white';
     let ringColor = 'ring-emerald-400/50';
 
-    if (plant.conservationLevel === 'endangered') {
-      bgColor = 'bg-rose-600';
-      ringColor = 'ring-rose-400/50';
-    } else if (plant.conservationLevel === 'rare' || plant.conservationLevel === 'vulnerable') {
-      bgColor = 'bg-amber-600';
-      ringColor = 'ring-amber-400/50';
-    }
-
     if (plant.status === 'pending') {
       bgColor = 'bg-purple-600';
       ringColor = 'ring-purple-400/50';
+    } else if (plant.conservationLevel === 'endangered') {
+      bgColor = 'bg-rose-600';
+      ringColor = 'ring-rose-400/50';
+    } else if (plant.conservationLevel === 'vulnerable') {
+      bgColor = 'bg-amber-600';
+      ringColor = 'ring-amber-400/50';
     }
 
     const sizeClass = isSelected ? 'w-10 h-10 -translate-x-5 -translate-y-5 ring-4' : 'w-8 h-8 -translate-x-4 -translate-y-4';
@@ -171,7 +169,11 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     // Filter plants
     const filteredPlants = plants.filter((plant) => {
       if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) return false;
-      if (selectedConservation !== 'all' && plant.conservationLevel !== selectedConservation) return false;
+      if (selectedConservation === 'pending') {
+        if (plant.status !== 'pending') return false;
+      } else if (selectedConservation !== 'all') {
+        if (plant.conservationLevel !== selectedConservation) return false;
+      }
       if (showOnlyVerified && plant.status !== 'verified') return false;
       return true;
     });
@@ -186,11 +188,16 @@ export const HerbMap: React.FC<HerbMapProps> = ({
       const popupDiv = document.createElement('div');
       popupDiv.className = 'w-64 sm:w-72 overflow-hidden rounded-xl bg-white font-sans text-stone-800 shadow-md';
 
-      let statusBadge = plant.conservationStatus === 'Nguy cấp (Cần bảo tồn)'
-        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">Nguy cấp</span>'
-        : plant.conservationStatus === 'Sắp bị đe dọa'
-        ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Sắp nguy cấp</span>'
-        : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Bình thường</span>';
+      let statusBadge = '';
+      if (plant.status === 'pending') {
+        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">Điểm mới (chờ duyệt)</span>';
+      } else if (plant.conservationLevel === 'endangered') {
+        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">Nguy cấp / Cần bảo tồn</span>';
+      } else if (plant.conservationLevel === 'vulnerable') {
+        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Sắp nguy cấp</span>';
+      } else {
+        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">An toàn</span>';
+      }
 
       popupDiv.innerHTML = `
         <div class="relative h-28 w-full overflow-hidden bg-stone-100">
@@ -415,31 +422,51 @@ export const HerbMap: React.FC<HerbMapProps> = ({
             <div className="flex items-center gap-1.5 overflow-x-auto">
               <button
                 onClick={() => setSelectedConservation('all')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium ${
-                  selectedConservation === 'all' ? 'text-white bg-stone-700' : 'text-stone-400 hover:text-stone-200'
+                className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap transition-colors ${
+                  selectedConservation === 'all' ? 'text-white bg-stone-700 font-semibold' : 'text-stone-400 hover:text-stone-200'
                 }`}
               >
                 Mọi trạng thái
               </button>
               <button
-                onClick={() => setSelectedConservation('endangered')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 ${
-                  selectedConservation === 'endangered'
-                    ? 'bg-rose-900/80 text-rose-200 border border-rose-700'
-                    : 'text-rose-400 hover:text-rose-300'
+                onClick={() => setSelectedConservation('safe')}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
+                  selectedConservation === 'safe'
+                    ? 'bg-emerald-900/80 text-emerald-200 border border-emerald-700 font-semibold'
+                    : 'text-emerald-400 hover:text-emerald-300'
                 }`}
               >
-                🔴 Nguy cấp
+                🟢 An toàn
               </button>
               <button
                 onClick={() => setSelectedConservation('vulnerable')}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium flex items-center gap-1 ${
+                className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
                   selectedConservation === 'vulnerable'
-                    ? 'bg-amber-900/80 text-amber-200 border border-amber-700'
+                    ? 'bg-amber-900/80 text-amber-200 border border-amber-700 font-semibold'
                     : 'text-amber-400 hover:text-amber-300'
                 }`}
               >
-                🟡 Cần bảo tồn
+                🟡 Sắp nguy cấp
+              </button>
+              <button
+                onClick={() => setSelectedConservation('endangered')}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
+                  selectedConservation === 'endangered'
+                    ? 'bg-rose-900/80 text-rose-200 border border-rose-700 font-semibold'
+                    : 'text-rose-400 hover:text-rose-300'
+                }`}
+              >
+                🔴 Nguy cấp / Cần bảo tồn
+              </button>
+              <button
+                onClick={() => setSelectedConservation('pending')}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
+                  selectedConservation === 'pending'
+                    ? 'bg-purple-900/80 text-purple-200 border border-purple-700 font-semibold'
+                    : 'text-purple-400 hover:text-purple-300'
+                }`}
+              >
+                🟣 Điểm mới
               </button>
             </div>
 
@@ -450,7 +477,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                 onChange={(e) => setShowOnlyVerified(e.target.checked)}
                 className="rounded border-stone-700 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 bg-stone-800"
               />
-              <span>Đã xác nhận</span>
+              <span>Đã duyệt</span>
             </label>
           </div>
         </div>
@@ -488,26 +515,26 @@ export const HerbMap: React.FC<HerbMapProps> = ({
       </div>
 
       {/* Map Legend (Bottom left) */}
-      <div className="absolute bottom-4 left-3 z-10 hidden sm:block bg-stone-900/90 backdrop-blur-md p-3 rounded-2xl border border-stone-800 shadow-xl text-stone-200 text-xs max-w-xs">
-        <h4 className="font-semibold text-stone-300 text-[11px] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+      <div className="absolute bottom-4 left-3 z-10 hidden sm:block bg-stone-900/90 backdrop-blur-md p-3.5 rounded-2xl border border-stone-800 shadow-xl text-stone-200 text-xs max-w-xs">
+        <h4 className="font-semibold text-stone-300 text-[11px] uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
           <Info className="w-3.5 h-3.5 text-emerald-400" /> Chú giải điểm khảo sát
         </h4>
-        <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-[11px]">
+        <div className="grid grid-cols-2 gap-y-2 gap-x-3 text-[11px]">
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-emerald-600 border border-white inline-block"></span>
-            <span>Ít quan tâm (An toàn)</span>
+            <span className="w-3 h-3 rounded-full bg-emerald-600 border border-white inline-block shrink-0"></span>
+            <span className="truncate">An toàn</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-amber-600 border border-white inline-block"></span>
-            <span>Sắp nguy cấp</span>
+            <span className="w-3 h-3 rounded-full bg-amber-600 border border-white inline-block shrink-0"></span>
+            <span className="truncate">Sắp nguy cấp</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-600 border border-white inline-block"></span>
-            <span>Nguy cấp / Cần bảo tồn</span>
+            <span className="w-3 h-3 rounded-full bg-rose-600 border border-white inline-block shrink-0"></span>
+            <span className="truncate">Nguy cấp / Cần bảo tồn</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-purple-600 border border-white inline-block"></span>
-            <span>Điểm mới (Chờ duyệt)</span>
+            <span className="w-3 h-3 rounded-full bg-purple-600 border border-white inline-block shrink-0"></span>
+            <span className="truncate">Điểm mới (chờ duyệt)</span>
           </div>
         </div>
       </div>

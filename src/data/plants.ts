@@ -45,7 +45,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 28,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -109,7 +109,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 45,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -173,7 +173,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Nam',
       elevationMeters: 85,
     },
-    conservationStatus: 'Nguy cấp (Cần bảo tồn)',
+    conservationStatus: 'Nguy cấp / Cần bảo tồn',
     conservationLevel: 'endangered',
     traditionalUses: {
       folkRemedies: [
@@ -231,7 +231,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 15,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -288,7 +288,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 38,
     },
-    conservationStatus: 'Sắp bị đe dọa',
+    conservationStatus: 'Sắp nguy cấp',
     conservationLevel: 'vulnerable',
     traditionalUses: {
       folkRemedies: [
@@ -345,7 +345,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Nam',
       elevationMeters: 8,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -402,8 +402,8 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 55,
     },
-    conservationStatus: 'Hiếm gặp tại địa phương',
-    conservationLevel: 'rare',
+    conservationStatus: 'Nguy cấp / Cần bảo tồn',
+    conservationLevel: 'endangered',
     traditionalUses: {
       folkRemedies: [
         'Bổ máu, dùng cho người xanh xao, thiếu máu, suy nhược cơ thể.',
@@ -460,7 +460,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 18,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -517,7 +517,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 12,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -574,7 +574,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Nam',
       elevationMeters: 62,
     },
-    conservationStatus: 'Sắp bị đe dọa',
+    conservationStatus: 'Sắp nguy cấp',
     conservationLevel: 'vulnerable',
     traditionalUses: {
       folkRemedies: [
@@ -631,7 +631,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Bắc',
       elevationMeters: 16,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [
@@ -687,7 +687,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Tam Anh Nam',
       elevationMeters: 7,
     },
-    conservationStatus: 'Ít quan tâm',
+    conservationStatus: 'An toàn',
     conservationLevel: 'safe',
     traditionalUses: {
       folkRemedies: [

@@ -98,13 +98,20 @@ export function App() {
   };
 
   // Handle saving new plant record
-  const handleSaveNewPlant = (newPlantData: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'>) => {
+  const handleSaveNewPlant = (
+    newPlantData: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
+    explicitSpeciesId?: string
+  ) => {
     const updated = saveNewPlant(newPlantData);
     setPlants(updated);
     setSurveyPrefillData(null);
     setPickedCoords(null);
     setIsPickingCoords(false);
-    showToast('Đã lưu phiếu khảo sát thực địa thành công vào cơ sở dữ liệu số!');
+    showToast(
+      explicitSpeciesId 
+        ? `Đã bổ sung điểm khảo sát mới giữ nguyên mã định danh [${explicitSpeciesId}]!` 
+        : 'Đã lưu phiếu khảo sát thực địa thành công vào cơ sở dữ liệu số!'
+    );
   };
 
   // Handle map coordinate picked
@@ -178,6 +185,8 @@ export function App() {
         }}
         totalPlantsCount={plants.length}
         pendingCount={pendingCount}
+        plants={plants}
+        onSelectPlant={handleSelectPlant}
       />
 
       {/* Main View Area */}
@@ -327,6 +336,7 @@ export function App() {
         onTriggerMapPickCoords={handleTriggerPickCoordsFromForm}
         pickedCoords={pickedCoords}
         isAdmin={isAdmin}
+        existingPlants={plants}
       />
 
       {/* About Project & Scientific Methodology Modal */}

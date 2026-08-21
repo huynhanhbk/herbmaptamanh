@@ -16,15 +16,19 @@ import {
   FileCode,
   Sparkles,
   TreePine,
-  AlertTriangle
+  AlertTriangle,
+  Pencil
 } from 'lucide-react';
 import { 
   updatePlantStatus, 
   deletePlant, 
   resetToDefaultData, 
   exportPlantsAsJSON, 
-  exportPlantsAsCSV 
+  exportPlantsAsCSV,
+  saveUpdatedPlant
 } from '../utils/storage';
+import { matchPlantSearch } from '../utils/searchHelper';
+import { EditPlantModal } from './EditPlantModal';
 
 interface AdminPanelProps {
   plants: MedicinalPlant[];
@@ -44,6 +48,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'verified'>('all');
   const [adminSearch, setAdminSearch] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
+  const [editingPlant, setEditingPlant] = useState<MedicinalPlant | null>(null);
 
   const showNotice = (msg: string) => {
     setActionSuccessMsg(msg);
@@ -60,6 +65,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const updated = updatePlantStatus(id, 'pending');
     onPlantsUpdated(updated);
     showNotice(`Đã chuyển loài "${name}" về trạng thái Chờ duyệt.`);
+  };
+
+  const handleOpenEdit = (plant: MedicinalPlant) => {
+    setEditingPlant(plant);
+  };
+
+  const handleSavePlantUpdates = (id: string, updates: Partial<MedicinalPlant>) => {
+    const updated = saveUpdatedPlant(id, updates);
+    onPlantsUpdated(updated);
+    showNotice(`Đã cập nhật thành công hồ sơ cây thuốc ${id}!`);
   };
 
   const handleDelete = (id: string, name: string) => {
@@ -108,13 +123,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (filterStatus === 'pending' && plant.status !== 'pending') return false;
     if (filterStatus === 'verified' && plant.status !== 'verified') return false;
     if (adminSearch.trim()) {
-      const q = adminSearch.toLowerCase();
-      return (
-        plant.vietnameseName.toLowerCase().includes(q) ||
-        plant.scientificName.toLowerCase().includes(q) ||
-        plant.id.toLowerCase().includes(q) ||
-        plant.location.communeSection.toLowerCase().includes(q)
-      );
+      return matchPlantSearch(plant, adminSearch);
     }
     return true;
   });
@@ -359,6 +368,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           )}
 
                           <button
+                            onClick={() => handleOpenEdit(plant)}
+                            className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 transition-colors border border-amber-200/60"
+                            title="Chỉnh sửa toàn diện thông tin cây thuốc"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
                             onClick={() => onSelectPlant(plant)}
                             className="p-1.5 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 transition-colors"
                             title="Xem chi tiết hồ sơ & in biển QR"
@@ -383,6 +400,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Full Record Edit Modal */}
+      {editingPlant && (
+        <EditPlantModal
+          plant={editingPlant}
+          isOpen={!!editingPlant}
+          onClose={() => setEditingPlant(null)}
+          onSave={handleSavePlantUpdates}
+        />
+      )}
     </div>
   );
 };
