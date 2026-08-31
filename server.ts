@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -200,6 +200,7 @@ Hãy tra cứu và trả về JSON chứa 3 phương án gợi ý cây dược l
             systemInstruction,
             responseMimeType: "application/json",
             responseSchema,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         });
       } catch (geminiError: any) {

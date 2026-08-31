@@ -177,6 +177,7 @@ export interface MedicinalPlant {
 
 export interface AICandidate {
   vietnameseName: string;
+  otherNames?: string;
   scientificName: string;
   family: string;
   confidence: number;

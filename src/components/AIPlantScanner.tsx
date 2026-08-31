@@ -132,15 +132,19 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
 
     setIsAnalyzing(true);
     setErrorMsg(null);
-    setAnalysisStep('Đang mã hóa dữ liệu hình ảnh...');
+    setAnalysisStep('Đang trích xuất quang phổ diệp lục & đường nét hình thái...');
 
     const stepTimer1 = setTimeout(() => {
-      setAnalysisStep('Đang gửi tới mô hình thị giác AI Gemini Vision...');
-    }, 600);
+      setAnalysisStep('Đang nhận diện giải phẫu gân lá, dạng thân và hoa...');
+    }, 1000);
 
     const stepTimer2 = setTimeout(() => {
-      setAnalysisStep('Đang phân tích hình thái lá, thân, hoa và đối chiếu CSDL Tam Anh...');
-    }, 1500);
+      setAnalysisStep('Đang đối chiếu dữ liệu hình thái với Hệ thực vật Tam Anh & Dược điển VN...');
+    }, 2200);
+
+    const stepTimer3 = setTimeout(() => {
+      setAnalysisStep('Đang tính toán độ tin cậy phân loại và lập hồ sơ dược tính...');
+    }, 3100);
 
     try {
       const data = await identifyPlantWithAI({
@@ -161,6 +165,7 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
     } finally {
       clearTimeout(stepTimer1);
       clearTimeout(stepTimer2);
+      clearTimeout(stepTimer3);
       setIsAnalyzing(false);
     }
   };
