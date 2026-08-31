@@ -106,6 +106,47 @@ function migratePlantRecord(p: any): MedicinalPlant {
   };
 }
 
+export function deduplicatePlants(plants: MedicinalPlant[]): MedicinalPlant[] {
+  const seenMap = new Map<string, MedicinalPlant>();
+  
+  for (const plant of plants) {
+    if (!plant || !plant.id) continue;
+    const existing = seenMap.get(plant.id);
+    if (!existing) {
+      seenMap.set(plant.id, plant);
+    } else {
+      // Merge duplicate records intelligently
+      const mergedPhotos = [...(existing.photos || [])];
+      (plant.photos || []).forEach((newPhoto) => {
+        if (!mergedPhotos.some((p) => p.url === newPhoto.url)) {
+          mergedPhotos.push(newPhoto);
+        }
+      });
+
+      const mergedLogs = [...(existing.monitoringLogs || [])];
+      (plant.monitoringLogs || []).forEach((newLog) => {
+        if (!mergedLogs.some((l) => l.date === newLog.date && l.status === newLog.status)) {
+          mergedLogs.push(newLog);
+        }
+      });
+
+      const merged: MedicinalPlant = {
+        ...existing,
+        ...plant,
+        id: plant.id,
+        photos: mergedPhotos,
+        monitoringLogs: mergedLogs,
+        surveyFrequencyCount: Math.max(existing.surveyFrequencyCount || 1, plant.surveyFrequencyCount || 1),
+        coverImage: plant.coverImage || existing.coverImage,
+        updatedAt: new Date().toISOString(),
+      };
+      seenMap.set(plant.id, merged);
+    }
+  }
+
+  return Array.from(seenMap.values());
+}
+
 export function getStoredPlants(): MedicinalPlant[] {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
@@ -116,7 +157,7 @@ export function getStoredPlants(): MedicinalPlant[] {
         try {
           const parsed = JSON.parse(legacyData);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            const migrated = parsed.map(migratePlantRecord);
+            const migrated = deduplicatePlants(parsed.map(migratePlantRecord));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
             return migrated;
           }
@@ -124,20 +165,31 @@ export function getStoredPlants(): MedicinalPlant[] {
           // ignore
         }
       }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PLANTS_DATA));
-      return INITIAL_PLANTS_DATA;
+      const deduplicatedInitial = deduplicatePlants(INITIAL_PLANTS_DATA);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicatedInitial));
+      return deduplicatedInitial;
     }
     const parsed = JSON.parse(data);
-    return Array.isArray(parsed) ? parsed.map(migratePlantRecord) : INITIAL_PLANTS_DATA;
+    if (Array.isArray(parsed)) {
+      const migrated = parsed.map(migratePlantRecord);
+      const deduplicated = deduplicatePlants(migrated);
+      // If duplicates existed in localStorage, auto-heal and rewrite clean array
+      if (deduplicated.length !== parsed.length) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
+      }
+      return deduplicated;
+    }
+    return deduplicatePlants(INITIAL_PLANTS_DATA);
   } catch (err) {
     console.error('Error reading localStorage:', err);
-    return INITIAL_PLANTS_DATA;
+    return deduplicatePlants(INITIAL_PLANTS_DATA);
   }
 }
 
 export function savePlants(plants: MedicinalPlant[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(plants));
+    const deduplicated = deduplicatePlants(plants);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
   } catch (err) {
     console.error('Error saving to localStorage:', err);
   }
@@ -171,31 +223,66 @@ export function addPlant(
     }
   }
 
+  const existingIndex = assignedId ? currentPlants.findIndex((p) => p.id === assignedId) : -1;
+
   // 3. If it is a completely new species, generate the next sequential identifier (TA-HERB-XXX)
-  if (!assignedId) {
-    let maxNum = 0;
-    currentPlants.forEach((p) => {
-      const match = p.id.match(/TA-HERB-(\d+)/i);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (num > maxNum) maxNum = num;
-      }
-    });
-    assignedId = `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
+  if (!assignedId || existingIndex === -1) {
+    if (!assignedId) {
+      let maxNum = 0;
+      currentPlants.forEach((p) => {
+        const match = p.id.match(/TA-HERB-(\d+)/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      });
+      assignedId = `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
+    }
+
+    const now = new Date().toISOString();
+    const newPlant: MedicinalPlant = {
+      ...plant,
+      id: assignedId,
+      surveyFrequencyCount: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const updated = deduplicatePlants([newPlant, ...currentPlants]);
+    savePlants(updated);
+    return newPlant;
   }
 
+  // 4. If assignedId already exists in currentPlants, update/enrich the existing record rather than duplicating it!
+  const existingPlant = currentPlants[existingIndex];
   const now = new Date().toISOString();
-  const newPlant: MedicinalPlant = {
+
+  // Merge photos
+  const mergedPhotos = [...(existingPlant.photos || [])];
+  (plant.photos || []).forEach((p) => {
+    if (!mergedPhotos.some((mp) => mp.url === p.url)) {
+      mergedPhotos.push(p);
+    }
+  });
+
+  const updatedExistingPlant: MedicinalPlant = {
+    ...existingPlant,
     ...plant,
     id: assignedId,
-    surveyFrequencyCount: 1,
-    createdAt: now,
+    photos: mergedPhotos,
+    coverImage: plant.coverImage || existingPlant.coverImage,
+    location: plant.location || existingPlant.location,
+    habitat: plant.habitat || existingPlant.habitat,
+    habitatCategory: plant.habitatCategory || existingPlant.habitatCategory,
+    status: plant.status || existingPlant.status,
+    surveyFrequencyCount: (existingPlant.surveyFrequencyCount || 1) + 1,
     updatedAt: now,
   };
 
-  const updated = [newPlant, ...currentPlants];
+  currentPlants[existingIndex] = updatedExistingPlant;
+  const updated = deduplicatePlants(currentPlants);
   savePlants(updated);
-  return newPlant;
+  return updatedExistingPlant;
 }
 
 export function saveNewPlant(
