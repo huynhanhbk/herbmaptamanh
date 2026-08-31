@@ -2,7 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
-  ConservationLevel 
+  ConservationLevel,
+  HABITAT_OPTIONS,
+  COMMUNE_VILLAGES,
+  getHabitatLabel,
+  getConservationStatusLabel
 } from '../types';
 import { 
   Search, 
@@ -18,7 +22,10 @@ import {
   ShieldAlert, 
   HeartHandshake, 
   Compass,
-  X
+  X,
+  Waves,
+  Wheat,
+  Trees
 } from 'lucide-react';
 import { matchPlantSearch } from '../utils/searchHelper';
 
@@ -91,7 +98,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           </h1>
 
           <p className="text-xs sm:text-sm text-stone-300 leading-relaxed">
-            Tra cứu nhận diện hình thái, sinh cảnh phân bố thực tế và tri thức sử dụng cây thuốc dân gian đã được ghi nhận qua khảo sát thực địa tại Tam Anh Bắc và Tam Anh Nam.
+            Tra cứu nhận diện hình thái, sinh cảnh phân bố thực tế (06 loại sinh cảnh) và 15 thôn trên địa bàn xã Tam Anh.
           </p>
 
           {/* Quick AI Trigger */}
@@ -121,7 +128,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm kiếm theo tên cây, tên khoa học, sinh cảnh, công dụng dân gian hoặc mã ID..."
+            placeholder="Tìm kiếm theo tên cây, tên khoa học, sinh cảnh, thôn/xóm, công dụng hoặc mã ID..."
             className="w-full text-xs text-stone-800 pl-10 pr-9 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-stone-50"
           />
           {searchQuery && (
@@ -134,7 +141,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           )}
         </div>
 
-        {/* Habitat Category Filters */}
+        {/* Habitat Category Filters (06 categories) */}
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none text-xs">
           <span className="text-stone-400 font-semibold text-[11px] shrink-0">Sinh cảnh:</span>
           <button
@@ -145,61 +152,24 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
             }`}
           >
-            Tất cả
+            Tất cả (06)
           </button>
-          <button
-            onClick={() => setSelectedHabitat('forest')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedHabitat === 'forest'
-                ? 'bg-emerald-700 text-white font-semibold shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <TreePine className="w-3.5 h-3.5 text-emerald-600" /> Rừng thứ sinh
-          </button>
-          <button
-            onClick={() => setSelectedHabitat('garden')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedHabitat === 'garden'
-                ? 'bg-emerald-700 text-white font-semibold shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Home className="w-3.5 h-3.5 text-teal-600" /> Vườn & Bờ rào
-          </button>
-          <button
-            onClick={() => setSelectedHabitat('hill')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedHabitat === 'hill'
-                ? 'bg-emerald-700 text-white font-semibold shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Mountain className="w-3.5 h-3.5 text-amber-600" /> Gò đồi
-          </button>
-          <button
-            onClick={() => setSelectedHabitat('stream')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedHabitat === 'stream'
-                ? 'bg-emerald-700 text-white font-semibold shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Droplets className="w-3.5 h-3.5 text-cyan-600" /> Ven suối & ẩm
-          </button>
-          <button
-            onClick={() => setSelectedHabitat('red')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedHabitat === 'red'
-                ? 'bg-emerald-700 text-white font-semibold shadow-xs'
-                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
-            }`}
-          >
-            <Mountain className="w-3.5 h-3.5 text-red-500" /> Đất đỏ
-          </button>
+          {HABITAT_OPTIONS.map((hab) => (
+            <button
+              key={hab.id}
+              onClick={() => setSelectedHabitat(hab.id)}
+              className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                selectedHabitat === hab.id
+                  ? 'bg-emerald-700 text-white font-semibold shadow-xs'
+                  : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+              }`}
+            >
+              <span>{hab.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Secondary filters: Conservation & Commune Section */}
+        {/* Secondary filters: Conservation & Commune Village (15 villages) */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
           <div className="flex items-center gap-1.5 overflow-x-auto">
             <span className="text-stone-400 font-semibold text-[11px] shrink-0">Bảo tồn:</span>
@@ -209,17 +179,17 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 selectedConservation === 'all' ? 'bg-stone-800 text-white font-bold' : 'text-stone-600 hover:bg-stone-100'
               }`}
             >
-              Mọi cấp độ
+              Tất cả
             </button>
             <button
-              onClick={() => setSelectedConservation('endangered')}
+              onClick={() => setSelectedConservation('safe')}
               className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 ${
-                selectedConservation === 'endangered'
-                  ? 'bg-rose-600 text-white font-bold'
-                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
+                selectedConservation === 'safe'
+                  ? 'bg-emerald-600 text-white font-bold'
+                  : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
               }`}
             >
-              🔴 Nguy cấp
+              🟢 An toàn
             </button>
             <button
               onClick={() => setSelectedConservation('vulnerable')}
@@ -229,21 +199,31 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                   : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
               }`}
             >
-              🟡 Cần bảo tồn
+              🟡 Sắp nguy cấp
+            </button>
+            <button
+              onClick={() => setSelectedConservation('endangered')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 ${
+                selectedConservation === 'endangered'
+                  ? 'bg-rose-600 text-white font-bold'
+                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
+              }`}
+            >
+              🔴 Nguy cấp / Cần bảo tồn
             </button>
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-stone-400 font-semibold text-[11px]">Khu vực:</span>
+            <span className="text-stone-400 font-semibold text-[11px]">Khu vực (15 thôn):</span>
             <select
               value={selectedCommune}
               onChange={(e) => setSelectedCommune(e.target.value)}
-              className="text-xs p-1.5 rounded-lg border border-stone-300 bg-stone-50 font-medium text-stone-700"
+              className="text-xs p-1.5 rounded-lg border border-stone-300 bg-stone-50 font-medium text-stone-700 max-w-[200px]"
             >
-              <option value="all">Toàn bộ xã Tam Anh</option>
-              <option value="Tam Anh Bắc">Tam Anh Bắc (Đức Bố)</option>
-              <option value="Tam Anh Nam">Tam Anh Nam (Diêm Phổ)</option>
-              <option value="Vùng đồi Khe Tre">Vùng đồi Khe Tre</option>
+              <option value="all">Toàn bộ 15 thôn xã Tam Anh</option>
+              {COMMUNE_VILLAGES.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -295,13 +275,18 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
 
                   {/* Top badges */}
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
+                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5 flex-wrap">
                     <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-black/70 text-white backdrop-blur-xs">
                       {plant.id}
                     </span>
                     {plant.status === 'pending' && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-600 text-white">
                         Chờ duyệt
+                      </span>
+                    )}
+                    {(plant.isDisappeared || plant.occurrenceStatus === 'disappeared') && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-600 text-white shadow-sm flex items-center gap-1">
+                        ⚠️ Đã biến mất
                       </span>
                     )}
                   </div>
@@ -315,7 +300,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                         ? 'bg-amber-500 text-stone-900'
                         : 'bg-emerald-700 text-white'
                     }`}>
-                      {plant.conservationStatus}
+                      {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
                     </span>
                   </div>
                 </div>

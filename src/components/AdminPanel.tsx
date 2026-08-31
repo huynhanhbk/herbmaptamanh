@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MedicinalPlant } from '../types';
 import { 
   ShieldCheck, 
@@ -17,7 +17,11 @@ import {
   Sparkles,
   TreePine,
   AlertTriangle,
-  Pencil
+  Pencil,
+  Upload,
+  Database,
+  CalendarCheck,
+  Layers
 } from 'lucide-react';
 import { 
   updatePlantStatus, 
@@ -25,10 +29,14 @@ import {
   resetToDefaultData, 
   exportPlantsAsJSON, 
   exportPlantsAsCSV,
-  saveUpdatedPlant
+  saveUpdatedPlant,
+  getDailyBackups,
+  isAutoBackupEnabled
 } from '../utils/storage';
 import { matchPlantSearch } from '../utils/searchHelper';
 import { EditPlantModal } from './EditPlantModal';
+import { DataImportModal } from './DataImportModal';
+import { BackupManagerModal } from './BackupManagerModal';
 
 interface AdminPanelProps {
   plants: MedicinalPlant[];
@@ -49,10 +57,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [adminSearch, setAdminSearch] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [editingPlant, setEditingPlant] = useState<MedicinalPlant | null>(null);
+  
+  // Modals for Import & Backup Manager
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState<boolean>(false);
+  const [backupStats, setBackupStats] = useState<{ total: number; latestDate?: string; autoActive: boolean }>({
+    total: 0,
+    autoActive: true,
+  });
+
+  const refreshBackupStats = () => {
+    const list = getDailyBackups();
+    const latest = list.length > 0 ? list[0].date : undefined;
+    setBackupStats({
+      total: list.length,
+      latestDate: latest,
+      autoActive: isAutoBackupEnabled(),
+    });
+  };
+
+  useEffect(() => {
+    refreshBackupStats();
+  }, [plants]);
 
   const showNotice = (msg: string) => {
     setActionSuccessMsg(msg);
-    setTimeout(() => setActionSuccessMsg(null), 3000);
+    setTimeout(() => setActionSuccessMsg(null), 3500);
   };
 
   const handleApprove = (id: string, name: string) => {
@@ -119,6 +149,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     showNotice('Đã xuất bảng tính CSV thành công!');
   };
 
+  const handleImportSuccess = (updatedPlants: MedicinalPlant[], message: string) => {
+    onPlantsUpdated(updatedPlants);
+    refreshBackupStats();
+    showNotice(message);
+  };
+
+  const handleRestoreSuccess = (restoredPlants: MedicinalPlant[], message: string) => {
+    onPlantsUpdated(restoredPlants);
+    refreshBackupStats();
+    showNotice(message);
+  };
+
   const filtered = plants.filter((plant) => {
     if (filterStatus === 'pending' && plant.status !== 'pending') return false;
     if (filterStatus === 'verified' && plant.status !== 'verified') return false;
@@ -146,11 +188,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             Kiểm Duyệt Thực Địa & Quản Trị CSDL Cây Thuốc
           </h1>
           <p className="text-xs sm:text-sm text-stone-300 max-w-2xl mt-1 leading-relaxed">
-            Thẩm định tọa độ GPS, đối chiếu mẫu ảnh lá-hoa-quả, phê duyệt dữ liệu do học sinh và cộng đồng đóng góp trước khi xuất bản rộng rãi.
+            Thẩm định tọa độ GPS, đối chiếu mẫu ảnh lá-hoa-quả, nhập/xuất tệp dữ liệu CSV/JSON và quản lý sao lưu tự động hằng ngày.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Quick Backup Modal trigger */}
+          <button
+            onClick={() => setIsBackupModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-amber-900/80 hover:bg-amber-800 text-amber-100 text-xs font-semibold border border-amber-700/60 transition-colors flex items-center gap-1.5 shadow-xs"
+            title="Quản lý sao lưu tự động hằng ngày & điểm phục hồi"
+          >
+            <Database className="w-3.5 h-3.5 text-amber-300" />
+            <span>Sao lưu & Phục hồi</span>
+            {backupStats.autoActive && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            )}
+          </button>
+
+          {/* Quick Import Modal trigger */}
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-900/80 hover:bg-emerald-800 text-emerald-100 text-xs font-semibold border border-emerald-700/60 transition-colors flex items-center gap-1.5 shadow-xs"
+            title="Nhập file CSV hoặc JSON từ máy tính/server khác"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-300" />
+            <span>Nhập File (JSON/CSV)</span>
+          </button>
+
           <button
             onClick={onLogoutAdmin}
             className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-semibold border border-stone-700 transition-colors flex items-center gap-1.5"
@@ -161,11 +226,79 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         </div>
       </div>
 
+      {/* Auto Backup & Database Health Bar */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        {/* Backup health badge */}
+        <div 
+          onClick={() => setIsBackupModalOpen(true)}
+          className="p-3.5 rounded-2xl bg-white border border-stone-200 hover:border-amber-300 shadow-2xs cursor-pointer flex items-center justify-between transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+              <CalendarCheck className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-stone-900 text-xs">Tự động sao lưu hằng ngày</span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800">
+                  {backupStats.autoActive ? 'BẬT' : 'TẮT'}
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-500">
+                {backupStats.latestDate ? `Gần nhất: ${backupStats.latestDate}` : 'Tự động sao lưu mỗi ngày'} • {backupStats.total} bản lưu
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-amber-700 font-semibold group-hover:translate-x-0.5 transition-transform">
+            Quản lý &rarr;
+          </span>
+        </div>
+
+        {/* Import & Migrate quick bar */}
+        <div 
+          onClick={() => setIsImportModalOpen(true)}
+          className="p-3.5 rounded-2xl bg-white border border-stone-200 hover:border-emerald-300 shadow-2xs cursor-pointer flex items-center justify-between transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+              <Upload className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-stone-900 text-xs block">Nhập dữ liệu (JSON / CSV)</span>
+              <p className="text-[11px] text-stone-500">
+                Khôi phục hoặc chuyển đổi dữ liệu từ server khác
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-emerald-700 font-semibold group-hover:translate-x-0.5 transition-transform">
+            Tải tệp lên &rarr;
+          </span>
+        </div>
+
+        {/* Database Total Stats */}
+        <div className="p-3.5 rounded-2xl bg-white border border-stone-200 shadow-2xs flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="font-bold text-stone-900 text-xs block">Tổng số loài trong CSDL</span>
+              <p className="text-[11px] text-stone-500">
+                {verifiedCount} đã thẩm định • {pendingCount} chờ duyệt
+              </p>
+            </div>
+          </div>
+          <span className="font-extrabold text-stone-900 text-base">
+            {plants.length} loài
+          </span>
+        </div>
+      </div>
+
       {/* Success notice */}
       {actionSuccessMsg && (
-        <div className="p-3 rounded-2xl bg-emerald-900/90 text-emerald-100 border border-emerald-700 text-xs flex items-center gap-2 animate-fadeIn">
+        <div className="p-3.5 rounded-2xl bg-emerald-900/95 text-emerald-100 border border-emerald-700 text-xs flex items-center gap-2 animate-fadeIn shadow-xs">
           <CheckCircle className="w-4 h-4 text-emerald-300 shrink-0" />
-          <span>{actionSuccessMsg}</span>
+          <span className="font-medium">{actionSuccessMsg}</span>
         </div>
       )}
 
@@ -207,9 +340,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </button>
         </div>
 
-        {/* Search input & Export buttons */}
+        {/* Search input & Export/Import buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative flex-1 sm:w-60">
+          <div className="relative flex-1 sm:w-56">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-stone-400" />
             <input
               type="text"
@@ -219,6 +352,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               className="w-full pl-8 pr-3 py-1.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 text-xs"
             />
           </div>
+
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-semibold flex items-center gap-1.5 transition-colors"
+            title="Nhập dữ liệu tệp CSV hoặc JSON"
+          >
+            <Upload className="w-3.5 h-3.5 text-emerald-700" />
+            <span>Nhập File</span>
+          </button>
 
           <button
             onClick={handleDownloadCSV}
@@ -410,6 +552,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           onSave={handleSavePlantUpdates}
         />
       )}
+
+      {/* Data Import Modal (JSON/CSV) */}
+      <DataImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onImportSuccess={handleImportSuccess}
+      />
+
+      {/* Backup & Daily Snapshot Manager Modal */}
+      <BackupManagerModal
+        isOpen={isBackupModalOpen}
+        onClose={() => {
+          setIsBackupModalOpen(false);
+          refreshBackupStats();
+        }}
+        onRestoreSuccess={handleRestoreSuccess}
+      />
     </div>
   );
 };

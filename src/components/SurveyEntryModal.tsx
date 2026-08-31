@@ -18,14 +18,18 @@ import {
   Layers,
   ChevronDown,
   ChevronUp,
-  Tag
+  Tag,
+  RotateCcw
 } from 'lucide-react';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
   ConservationLevel, 
   UnifiedConservationStatus,
-  AICandidate 
+  AICandidate,
+  HABITAT_OPTIONS,
+  COMMUNE_VILLAGES,
+  CommuneVillage
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
 
@@ -80,8 +84,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   // Location & Habitat (The key survey variables)
   const [habitat, setHabitat] = useState('Bờ rào & nương đồi ven làng');
   const [habitatCategory, setHabitatCategory] = useState<HabitatCategory>('garden');
-  const [communeSection, setCommuneSection] = useState<'Tam Anh Bắc' | 'Tam Anh Nam' | 'Vùng đồi Khe Tre' | 'Ven sông Trầu' | 'Khu vực Đồn Cát'>('Tam Anh Bắc');
-  const [addressDescription, setAddressDescription] = useState('Thôn Đức Bố 1, xã Tam Anh Bắc');
+  const [communeSection, setCommuneSection] = useState<CommuneVillage>('Thôn Đức Bố');
+  const [addressDescription, setAddressDescription] = useState('Thôn Đức Bố, xã Tam Anh');
   const [lat, setLat] = useState<number>(15.4635);
   const [lng, setLng] = useState<number>(108.6185);
   const [isGettingGPS, setIsGettingGPS] = useState(false);
@@ -115,6 +119,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [surveyor, setSurveyor] = useState('Nhóm nghiên cứu KHKT Trường THCS Tam Anh');
   const [surveyTitle, setSurveyTitle] = useState('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
 
+  // Ref to track if modal reopened due to map coordinate picking
+  const isReturningFromMapPickRef = useRef(false);
+
   // Compute unique species list from stored plants
   const uniqueSpeciesList = useMemo(() => {
     const list = existingPlants && existingPlants.length > 0 ? existingPlants : getStoredPlants();
@@ -132,7 +139,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     return uniqueSpeciesList.find((p) => p.id === selectedSpeciesId) || uniqueSpeciesList[0] || null;
   }, [uniqueSpeciesList, selectedSpeciesId]);
 
-  // Helper to load an existing plant's data into the form
+  // Helper to load an existing plant's botanical data
   const applyExistingPlant = (plant: MedicinalPlant) => {
     setSelectedSpeciesId(plant.id);
     setVietnameseName(plant.vietnameseName);
@@ -155,9 +162,65 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setPreparationText(plant.traditionalUses?.preparation || 'Rửa sạch phơi khô sắc nước uống');
   };
 
-  // Populate when modal opens or prefillData changes
+  // Full reset function for a brand new survey
+  const resetFormToDefault = (targetMode: 'existing_species' | 'new_species' = 'existing_species') => {
+    setEntryMode(targetMode);
+    setSpeciesSearchQuery('');
+    setIsSpeciesDropdownOpen(false);
+    setShowStandardTraits(false);
+    setValidationError(null);
+    setGpsStatusMsg(null);
+    setIsGettingGPS(false);
+
+    // Reset survey field location & informants to fresh baseline
+    setHabitat('Bờ rào & nương đồi ven làng');
+    setHabitatCategory('garden');
+    setCommuneSection('Thôn Đức Bố');
+    setAddressDescription('Thôn Đức Bố, xã Tam Anh');
+    setLat(15.4635);
+    setLng(108.6185);
+    setInformantName('Người dân am hiểu cây thuốc bản địa Tam Anh');
+    setInformantRole('Thôn Đức Bố');
+    setHasConsent(true);
+    setSurveyor('Nhóm nghiên cứu KHKT Trường THCS Tam Anh');
+    setSurveyTitle('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
+
+    if (targetMode === 'existing_species' && uniqueSpeciesList.length > 0) {
+      const defaultPlant = uniqueSpeciesList[0];
+      applyExistingPlant(defaultPlant);
+    } else {
+      setSelectedSpeciesId('');
+      setVietnameseName('');
+      setOtherNames('');
+      setScientificName('');
+      setFamily('Chưa xác định');
+      setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
+      setShortDescription('');
+      setGrowthForm('');
+      setLeavesTrait('');
+      setFlowersTrait('');
+      setFruitsTrait('');
+      setRootsTrait('');
+      setConservationStatus('An toàn');
+      setConservationLevel('safe');
+      setFolkRemediesText('');
+      setPartUsedText('Thân cành và lá');
+      setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
+    }
+  };
+
+  // Handle modal lifecycle & prefilling
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // When modal is closed without map picking active, reset map pick flag
+      return;
+    }
+
+    // If reopening because coordinates were picked from map, preserve existing form values and only update coordinates
+    if (isReturningFromMapPickRef.current) {
+      isReturningFromMapPickRef.current = false;
+      return;
+    }
 
     if (prefillData) {
       const candidateName = (prefillData.candidate.vietnameseName || '').trim().toLowerCase();
@@ -185,28 +248,36 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         setEntryMode('new_species');
         setSelectedSpeciesId('');
         setVietnameseName(prefillData.candidate.vietnameseName || '');
+        setOtherNames('');
         setScientificName(prefillData.candidate.scientificName || '');
         setFamily(prefillData.candidate.family || 'Chưa xác định');
         if (prefillData.imageBase64) {
           setCoverImage(prefillData.imageBase64);
         }
         setShortDescription(prefillData.candidate.observedFeatures?.join(', ') || '');
+        setGrowthForm('');
+        setLeavesTrait(prefillData.candidate.observedFeatures?.join(', ') || '');
+        setFlowersTrait('');
+        setFruitsTrait('');
+        setRootsTrait('');
         setFolkRemediesText(prefillData.candidate.folkUseSummary || '');
+        setPartUsedText('Thân cành và lá');
+        setPreparationText('Rửa sạch phơi khô sắc nước uống hoặc giã tươi');
         if (prefillData.candidate.habitatInCentralVietnam) {
           setHabitat(prefillData.candidate.habitatInCentralVietnam);
         }
+        setCommuneSection('Thôn Đức Bố');
+        setAddressDescription('Thôn Đức Bố, xã Tam Anh');
+        setLat(15.4635);
+        setLng(108.6185);
       }
     } else {
-      // Default to existing species mode on opening
-      if (uniqueSpeciesList.length > 0) {
-        setEntryMode('existing_species');
-        const defaultPlant = uniqueSpeciesList[0];
-        applyExistingPlant(defaultPlant);
-      }
+      // Fresh new survey: Reset all form fields to default!
+      resetFormToDefault('existing_species');
     }
-  }, [isOpen, prefillData, uniqueSpeciesList]);
+  }, [isOpen, prefillData]);
 
-  // Sync with pickedCoords from map if user clicks map
+  // Sync with pickedCoords from map when user clicks map
   useEffect(() => {
     if (pickedCoords) {
       setLat(pickedCoords.lat);
@@ -262,6 +333,42 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       },
       { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
     );
+  };
+
+  // Handle triggering map coordinate picking while preserving current typed form state
+  const handlePickCoordsOnMap = () => {
+    isReturningFromMapPickRef.current = true;
+    onTriggerMapPickCoords();
+  };
+
+  // Handle switching to existing species mode
+  const handleSwitchToExistingSpecies = () => {
+    setEntryMode('existing_species');
+    const plant = selectedExistingPlant || uniqueSpeciesList[0];
+    if (plant) {
+      applyExistingPlant(plant);
+    }
+  };
+
+  // Handle switching to new species mode
+  const handleSwitchToNewSpecies = () => {
+    setEntryMode('new_species');
+    setSelectedSpeciesId('');
+    setVietnameseName('');
+    setOtherNames('');
+    setScientificName('');
+    setFamily('Chưa xác định');
+    setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
+    setShortDescription('');
+    setGrowthForm('');
+    setLeavesTrait('');
+    setFlowersTrait('');
+    setFruitsTrait('');
+    setRootsTrait('');
+    setFolkRemediesText('');
+    setPartUsedText('Thân cành và lá');
+    setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
+    setValidationError(null);
   };
 
   // Handle Photo upload
@@ -360,6 +467,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     };
 
     onSaveNewPlant(newRecord, explicitId);
+    resetFormToDefault('existing_species');
     onClose();
   };
 
@@ -411,12 +519,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             <div className="grid grid-cols-2 gap-1.5">
               <button
                 type="button"
-                onClick={() => {
-                  setEntryMode('existing_species');
-                  if (selectedExistingPlant) {
-                    applyExistingPlant(selectedExistingPlant);
-                  }
-                }}
+                onClick={handleSwitchToExistingSpecies}
                 className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                   entryMode === 'existing_species'
                     ? 'bg-emerald-700 text-white shadow-sm'
@@ -434,10 +537,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => {
-                  setEntryMode('new_species');
-                  setSelectedSpeciesId('');
-                }}
+                onClick={handleSwitchToNewSpecies}
                 className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
                   entryMode === 'new_species'
                     ? 'bg-amber-600 text-white shadow-sm'
@@ -737,36 +837,31 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Khu vực địa bàn xã <span className="text-rose-500">*</span>:
+                  Khu vực địa bàn thôn (15 thôn) <span className="text-rose-500">*</span>:
                 </label>
                 <select
                   value={communeSection}
                   onChange={(e: any) => setCommuneSection(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white font-semibold"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white font-semibold text-xs"
                 >
-                  <option value="Tam Anh Bắc">Thôn thuộc Tam Anh Bắc (Đức Bố 1, Đức Bố 2...)</option>
-                  <option value="Tam Anh Nam">Thôn thuộc Tam Anh Nam (Diêm Phổ, Nam Sơn...)</option>
-                  <option value="Vùng đồi Khe Tre">Vùng đồi Khe Tre / Rừng đồi Núi Chúa</option>
-                  <option value="Ven sông Trầu">Ven lưu vực sông Trầu / Kênh mương</option>
-                  <option value="Khu vực Đồn Cát">Khu vực cồn bãi cát ven biển Tam Anh</option>
+                  {COMMUNE_VILLAGES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
                 </select>
               </div>
 
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Loại sinh cảnh phân bố <span className="text-rose-500">*</span>:
+                  Loại sinh cảnh phân bố (06 loại) <span className="text-rose-500">*</span>:
                 </label>
                 <select
                   value={habitatCategory}
                   onChange={(e: any) => setHabitatCategory(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white font-semibold"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white font-semibold text-xs"
                 >
-                  <option value="garden">Vườn nhà & bờ rào nương rẫy</option>
-                  <option value="forest">Rừng thứ sinh ẩm / đồi núi</option>
-                  <option value="hill">Gò đồi cây bụi khô cằn</option>
-                  <option value="stream">Ven bờ suối, bờ ruộng ẩm</option>
-                  <option value="coastal">Cồn cát / ven biển</option>
-                  <option value="red">Vùng đất đỏ / đồi núi bazan</option>
+                  {HABITAT_OPTIONS.map((h) => (
+                    <option key={h.id} value={h.id}>{h.label}</option>
+                  ))}
                 </select>
               </div>
 
@@ -805,7 +900,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                       <span>🟢 An toàn</span>
                     </div>
                     <span className={`text-[10px] ${conservationStatus === 'An toàn' ? 'text-emerald-100' : 'text-stone-500'}`}>
-                      Cây phổ biến, sinh trưởng tốt, ít quan tâm
+                      Cây phổ biến, sinh trưởng tốt trong tự nhiên/vườn
                     </span>
                   </button>
 
@@ -877,7 +972,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
 
                     <button
                       type="button"
-                      onClick={onTriggerMapPickCoords}
+                      onClick={handlePickCoordsOnMap}
                       className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold flex items-center gap-1 transition-colors"
                     >
                       <Compass className="w-3.5 h-3.5 text-emerald-400" />
@@ -1054,6 +1149,16 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => resetFormToDefault(entryMode)}
+                className="px-3 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-800 text-xs font-semibold transition-colors flex items-center gap-1 border border-stone-200"
+                title="Xóa trắng các mục đã nhập để ghi phiếu mới từ đầu"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Làm mới phiếu</span>
+              </button>
+
               <button
                 type="button"
                 onClick={onClose}

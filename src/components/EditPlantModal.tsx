@@ -13,7 +13,15 @@ import {
   Trash2,
   Clock
 } from 'lucide-react';
-import { MedicinalPlant, HabitatCategory, ConservationLevel, UnifiedConservationStatus } from '../types';
+import { 
+  MedicinalPlant, 
+  HabitatCategory, 
+  ConservationLevel, 
+  UnifiedConservationStatus,
+  HABITAT_OPTIONS,
+  COMMUNE_VILLAGES,
+  CommuneVillage
+} from '../types';
 
 interface EditPlantModalProps {
   plant: MedicinalPlant | null;
@@ -491,19 +499,16 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Nhóm sinh cảnh:
+                    Nhóm sinh cảnh (06 loại):
                   </label>
                   <select
                     value={habitatCategory}
                     onChange={(e) => setHabitatCategory(e.target.value as HabitatCategory)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 font-medium"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 font-medium text-xs"
                   >
-                    <option value="garden">Vườn nhà / Quanh khu dân cư</option>
-                    <option value="forest">Rừng tự nhiên / Rừng tái sinh</option>
-                    <option value="hill">Gò đồi cây bụi khô cằn</option>
-                    <option value="stream">Ven bờ suối, bờ ruộng ẩm</option>
-                    <option value="coastal">Cồn cát / ven biển</option>
-                    <option value="red">Vùng đất đỏ / đồi núi bazan</option>
+                    {HABITAT_OPTIONS.map((h) => (
+                      <option key={h.id} value={h.id}>{h.label}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -516,7 +521,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                     value={habitat}
                     onChange={(e) => setHabitat(e.target.value)}
                     placeholder="Bờ rào, ven đường mòn, lùm cây bụi bãi hoang..."
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 text-xs"
                   />
                 </div>
               </div>
@@ -533,7 +538,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                     value={lat}
                     onChange={(e) => setLat(e.target.value)}
                     required
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-white font-mono"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-white font-mono text-xs"
                   />
                 </div>
 
@@ -547,7 +552,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                     value={lng}
                     onChange={(e) => setLng(e.target.value)}
                     required
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-white font-mono"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-white font-mono text-xs"
                   />
                 </div>
               </div>
@@ -555,18 +560,16 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Khu vực tại xã Tam Anh:
+                    Khu vực thôn (15 thôn):
                   </label>
                   <select
                     value={communeSection}
                     onChange={(e) => setCommuneSection(e.target.value as any)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 text-xs font-semibold"
                   >
-                    <option value="Tam Anh Bắc">Khu vực Tam Anh Bắc</option>
-                    <option value="Tam Anh Nam">Khu vực Tam Anh Nam</option>
-                    <option value="Vùng đồi Khe Tre">Vùng đồi Khe Tre / Rừng tự nhiên</option>
-                    <option value="Ven sông Trầu">Ven sông Trầu / Vùng trũng ẩm</option>
-                    <option value="Khu vực Đồn Cát">Khu vực Cồn cát / Đồn cát ven biển</option>
+                    {COMMUNE_VILLAGES.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
                   </select>
                 </div>
 
@@ -577,11 +580,11 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                   <select
                     value={conservationStatus}
                     onChange={(e) => handleConservationChange(e.target.value as UnifiedConservationStatus)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 font-medium"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 font-medium text-xs"
                   >
-                    <option value="An toàn">🟢 An toàn (Phổ biến, sinh trưởng tốt)</option>
-                    <option value="Sắp nguy cấp">🟡 Sắp nguy cấp (Quần thể thu hẹp / Khai thác nhiều)</option>
-                    <option value="Nguy cấp / Cần bảo tồn">🔴 Nguy cấp / Cần bảo tồn (Quý hiếm Sách Đỏ)</option>
+                    <option value="An toàn">🟢 An toàn</option>
+                    <option value="Sắp nguy cấp">🟡 Sắp nguy cấp</option>
+                    <option value="Nguy cấp / Cần bảo tồn">🔴 Nguy cấp / Cần bảo tồn</option>
                   </select>
                 </div>
               </div>

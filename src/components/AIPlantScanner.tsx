@@ -44,6 +44,30 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  // Clean reset function for the scanner
+  const handleResetScanner = () => {
+    setSelectedImage(null);
+    setMimeType('image/jpeg');
+    setUserNotes('');
+    setIsAnalyzing(false);
+    setAnalysisStep('Đang khởi tạo...');
+    setAnalysisResult(null);
+    setErrorMsg(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+    }
+  };
+
+  // Reset scanner state every time the modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      handleResetScanner();
+    }
+  }, [isOpen]);
+
   // Resize and compress image using HTML5 Canvas
   const resizeAndProcessImage = (file: File) => {
     const reader = new FileReader();
@@ -181,7 +205,6 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
               <h2 className="text-base font-bold flex items-center gap-1.5">
                 Nhận Diện Thực Vật Bằng AI
                 <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/60">
-                  Gemini Vision
                 </span>
               </h2>
               <p className="text-xs text-emerald-200/80">
@@ -190,12 +213,25 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 text-stone-300 hover:text-white hover:bg-emerald-800/80 rounded-xl transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedImage && !isAnalyzing && (
+              <button
+                onClick={handleResetScanner}
+                className="px-2.5 py-1 text-xs text-emerald-100 hover:text-white bg-emerald-800/80 hover:bg-emerald-700/80 rounded-xl transition-colors flex items-center gap-1 border border-emerald-600/50"
+                title="Xóa ảnh hiện tại và quét ảnh mới"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Quét ảnh khác</span>
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-1.5 text-stone-300 hover:text-white hover:bg-emerald-800/80 rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -428,19 +464,24 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                             </div>
                           </div>
 
-                          {/* Observed features */}
-                          <div className="text-xs text-stone-600 space-y-1 ml-7 mb-3">
-                            <p>
-                              🌿 <b>Đặc điểm nhận dạng:</b> {cand.observedFeatures.join(', ')}
+                          {/* Observed features & Botanical distinctions */}
+                          <div className="text-xs text-stone-600 space-y-1.5 ml-7 mb-3">
+                            <p className="leading-relaxed">
+                              🌿 <b className="text-stone-800">Hình thái quan sát:</b> {cand.observedFeatures.join(', ')}
                             </p>
+                            {cand.distinctionTips && (
+                              <p className="text-indigo-900 bg-indigo-50/80 p-2 rounded-xl border border-indigo-200/70 leading-relaxed">
+                                🔍 <b>Dấu hiệu phân biệt then chốt:</b> {cand.distinctionTips}
+                              </p>
+                            )}
                             {cand.habitatInCentralVietnam && (
-                              <p>
-                                📍 <b>Phân bố miền Trung / Tam Anh:</b> {cand.habitatInCentralVietnam}
+                              <p className="text-stone-700">
+                                📍 <b className="text-stone-800">Phân bố & Sinh cảnh:</b> {cand.habitatInCentralVietnam}
                               </p>
                             )}
                             {cand.folkUseSummary && (
-                              <p className="text-amber-800 bg-amber-50/60 p-1.5 rounded-lg border border-amber-200/50">
-                                🍵 <b>Kinh nghiệm dân gian:</b> {cand.folkUseSummary}
+                              <p className="text-amber-900 bg-amber-50/80 p-2 rounded-xl border border-amber-200/70 leading-relaxed">
+                                🍵 <b>Kinh nghiệm & Công dụng dược liệu:</b> {cand.folkUseSummary}
                               </p>
                             )}
                           </div>

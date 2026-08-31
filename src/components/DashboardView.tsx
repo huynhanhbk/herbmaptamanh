@@ -15,7 +15,9 @@ import {
 } from 'recharts';
 import { 
   MedicinalPlant, 
-  HabitatCategory 
+  HabitatCategory, 
+  COMMUNE_VILLAGES,
+  getConservationStatusLabel
 } from '../types';
 import { 
   ShieldAlert, 
@@ -47,29 +49,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const vulnerableCount = plants.filter((p) => p.conservationLevel === 'vulnerable').length;
   const folkRemediesCount = plants.filter((p) => p.traditionalUses.folkRemedies.length > 0).length;
 
-  // Habitat Distribution Data
+  // Habitat Distribution Data (06 standardized habitats)
+  const habitatColors: Record<HabitatCategory, string> = {
+    'natural_forest': '#047857',
+    'planted_forest': '#10b981',
+    'shrub_grassland': '#d97706',
+    'sea': '#0284c7',
+    'garden': '#059669',
+    'farmland': '#ca8a04',
+  };
+
   const habitatMap: Record<HabitatCategory, { name: string; count: number; color: string }> = {
-    garden: { name: 'Vườn & Bờ rào', count: 0, color: '#059669' },
-    forest: { name: 'Rừng thứ sinh', count: 0, color: '#047857' },
-    hill: { name: 'Gò đồi khô hạn', count: 0, color: '#d97706' },
-    stream: { name: 'Ven suối & ẩm', count: 0, color: '#0284c7' },
-    coastal: { name: 'Cồn cát ven biển', count: 0, color: '#6366f1' },
-    red: { name: 'Vùng đất đỏ / bazan', count: 0, color: '#dc2626' },
+    'natural_forest': { name: 'Rừng tự nhiên', count: 0, color: habitatColors['natural_forest'] },
+    'planted_forest': { name: 'Rừng trồng', count: 0, color: habitatColors['planted_forest'] },
+    'shrub_grassland': { name: 'Trảng cây bụi, cỏ', count: 0, color: habitatColors['shrub_grassland'] },
+    'sea': { name: 'Biển', count: 0, color: habitatColors['sea'] },
+    'garden': { name: 'Vườn nhà', count: 0, color: habitatColors['garden'] },
+    'farmland': { name: 'Đồng ruộng', count: 0, color: habitatColors['farmland'] },
   };
 
   plants.forEach((p) => {
-    if (habitatMap[p.habitatCategory]) {
+    if (p.habitatCategory && habitatMap[p.habitatCategory]) {
       habitatMap[p.habitatCategory].count += 1;
     }
   });
 
-  const habitatChartData = Object.values(habitatMap).filter((item) => item.count > 0);
+  const habitatChartData = Object.values(habitatMap);
 
   // Conservation Level Data
   const conservationData = [
-    { name: 'Ít quan tâm (An toàn)', count: plants.filter((p) => p.conservationLevel === 'safe').length, color: '#10b981' },
-    { name: 'Cần bảo tồn / Sắp nguy cấp', count: vulnerableCount, color: '#f59e0b' },
-    { name: 'Nguy cấp / Hiếm gặp', count: endangeredCount, color: '#e11d48' },
+    { name: 'An toàn', count: plants.filter((p) => p.conservationLevel === 'safe').length, color: '#10b981' },
+    { name: 'Sắp nguy cấp', count: vulnerableCount, color: '#f59e0b' },
+    { name: 'Nguy cấp / Cần bảo tồn', count: endangeredCount, color: '#e11d48' },
   ];
 
   // Survey frequency by timeline (Months in 2026)
@@ -80,6 +91,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { month: 'T01/26', count: 18, label: 'Thực địa đợt 1' },
     { month: 'T02/26', count: totalPlants + 6, label: 'Số hóa & QR' },
   ];
+
+  // Village Distribution Data (15 villages)
+  const villageData = COMMUNE_VILLAGES.map((village) => {
+    const rawVillageName = village.replace('Thôn ', '');
+    const count = plants.filter((p) => {
+      const sec = p.location?.communeSection;
+      const addr = p.location?.addressDescription || '';
+      return sec === village || (addr && addr.includes(rawVillageName));
+    }).length;
+    return {
+      name: rawVillageName,
+      fullName: village,
+      count: count
+    };
+  });
 
   // Declining Species Alert
   const decliningPlants = plants.filter((p) => p.trendStatus === 'declining' || p.conservationLevel === 'endangered' || p.conservationLevel === 'rare');
@@ -235,6 +261,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
+        {/* Village Distribution Chart (15 Villages) */}
+        <div className="lg:col-span-12 bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-bold text-sm text-stone-900">Phân Bố Cây Thuốc Theo 15 Thôn Xã Tam Anh</h3>
+              <p className="text-xs text-stone-500">Mật độ ghi nhận tiêu bản cây thuốc thực địa trên từng địa bàn thôn</p>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-teal-100 text-teal-800">
+              15 Thôn Toàn Xã
+            </span>
+          </div>
+
+          <div className="h-56 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={villageData} margin={{ top: 10, right: 20, left: -10, bottom: 25 }}>
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 10 }} 
+                  interval={0} 
+                  angle={-35}
+                  textAnchor="end"
+                />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip 
+                  formatter={(value: any, name: any, item: any) => [`${value} loài cây thuốc`, item.payload.fullName]}
+                  contentStyle={{ borderRadius: '0.75rem', fontSize: '12px' }}
+                />
+                <Bar dataKey="count" fill="#0d9488" radius={[6, 6, 0, 0]} name="Số loài cây thuốc" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
         {/* Timeline Area Chart (12 cols) */}
         <div className="lg:col-span-12 bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
@@ -301,7 +360,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   {plant.id}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
-                  {plant.conservationStatus}
+                  {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
                 </span>
               </div>
 

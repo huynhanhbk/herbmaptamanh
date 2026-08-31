@@ -122,7 +122,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
               <p className="text-[10px] sm:text-[11px] text-stone-400 font-medium tracking-tight mt-1 hidden md:block">
-                Bản đồ số & CSDL Dược liệu Dân gian Bảo tồn
+                Bản đồ số & CSDL Dược liệu
               </p>
             </div>
           </div>
@@ -323,7 +323,7 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenAdminLogin}
                 className="p-1.5 text-stone-400 hover:text-amber-400 rounded-xl hover:bg-stone-800 transition-colors flex items-center justify-center border border-transparent hover:border-stone-700"
-                title="Đăng nhập Ban Quản trị / Giám khảo"
+                title="Đăng nhập Ban Quản trị"
               >
                 <Lock className="w-4 h-4" />
               </button>

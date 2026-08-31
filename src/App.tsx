@@ -9,8 +9,8 @@ import { AIPlantScanner } from './components/AIPlantScanner';
 import { QRScannerModal } from './components/QRScannerModal';
 import { SurveyEntryModal } from './components/SurveyEntryModal';
 import { AboutProjectModal } from './components/AboutProjectModal';
-import { MedicinalPlant, AICandidate } from './types';
-import { getStoredPlants, saveNewPlant, verifyAdminPasscode } from './utils/storage';
+import { MedicinalPlant, AICandidate, PlantMonitoringLog } from './types';
+import { getStoredPlants, saveNewPlant, verifyAdminPasscode, checkAndRunDailyAutoBackup, addPlantMonitoringLog } from './utils/storage';
 import { Lock, CheckCircle, X, ShieldAlert } from 'lucide-react';
 
 export function App() {
@@ -45,10 +45,17 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load plants on mount
+  // Load plants on mount and trigger auto backup check
   useEffect(() => {
     const loaded = getStoredPlants();
     setPlants(loaded);
+
+    // Run automatic daily backup snapshot check
+    try {
+      checkAndRunDailyAutoBackup();
+    } catch (e) {
+      console.warn('Auto backup check:', e);
+    }
 
     // Check URL parameters for direct plant link (e.g. ?speciesId=TA-HERB-001)
     if (typeof window !== 'undefined') {
@@ -114,6 +121,24 @@ export function App() {
     );
   };
 
+  // Handle adding monitoring log (e.g. tracking presence, degradation, disappearance over time)
+  const handleAddMonitoringLog = (
+    plantId: string,
+    logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>
+  ) => {
+    const updated = addPlantMonitoringLog(plantId, logData);
+    setPlants(updated);
+    const updatedPlant = updated.find((p) => p.id === plantId);
+    if (updatedPlant) {
+      setSelectedPlant(updatedPlant);
+    }
+    showToast(
+      logData.status === 'disappeared'
+        ? 'Đã ghi nhận cây biến mất tại vị trí và tự động gỡ điểm đánh dấu khỏi Bản đồ!'
+        : 'Đã cập nhật đợt giám sát thực địa thành công!'
+    );
+  };
+
   // Handle map coordinate picked
   const handleCoordinatesPicked = (lat: number, lng: number) => {
     setPickedCoords({ lat, lng });
@@ -136,19 +161,10 @@ export function App() {
       setAdminPassInput('');
       setAdminLoginError(null);
       setActiveTab('admin');
-      showToast('Đăng nhập Quản trị viên / Hội đồng KHKT thành công!');
+      showToast('Đăng nhập Ban Quản trị thành công!');
     } else {
-      setAdminLoginError('Mật khẩu không chính xác. Thử "tamanh2026".');
+      setAdminLoginError('Mật khẩu quản trị không chính xác.');
     }
-  };
-
-  const handleQuickJudgeLogin = () => {
-    setIsAdmin(true);
-    setIsAdminLoginOpen(false);
-    setAdminPassInput('');
-    setAdminLoginError(null);
-    setActiveTab('admin');
-    showToast('Đã kích hoạt quyền xem và kiểm duyệt cho Giám khảo KHKT.');
   };
 
   const pendingCount = plants.filter((p) => p.status === 'pending').length;
@@ -198,6 +214,10 @@ export function App() {
             selectedPlantId={mapSelectedPlantId}
             pickingCoordinatesMode={isPickingCoords}
             onCoordinatesPicked={handleCoordinatesPicked}
+            onCancelPickCoordinates={() => {
+              setIsPickingCoords(false);
+              setIsSurveyModalOpen(true);
+            }}
           />
         )}
 
@@ -253,9 +273,9 @@ export function App() {
             </div>
 
             <div>
-              <h3 className="font-bold text-base text-stone-900">Đăng nhập Ban Quản Trị / Giám Khảo</h3>
+              <h3 className="font-bold text-base text-stone-900">Đăng nhập Ban Quản Trị</h3>
               <p className="text-xs text-stone-500 mt-1">
-                Dành cho giáo viên hướng dẫn, hội đồng thẩm định KHKT xã Tam Anh để duyệt phiếu khảo sát thực địa.
+                Dành cho Ban Quản trị và Thầy Cô hướng dẫn để kiểm duyệt và quản trị cơ sở dữ liệu thực địa.
               </p>
             </div>
 
@@ -268,7 +288,7 @@ export function App() {
                   type="password"
                   value={adminPassInput}
                   onChange={(e) => setAdminPassInput(e.target.value)}
-                  placeholder="Nhập mã (Mặc định: tamanh2026)"
+                  placeholder="Nhập mật mã..."
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
                   autoFocus
                 />
@@ -284,16 +304,6 @@ export function App() {
                 Xác nhận đăng nhập
               </button>
             </form>
-
-            <div className="pt-2 border-t border-stone-100 text-center">
-              <button
-                type="button"
-                onClick={handleQuickJudgeLogin}
-                className="text-xs text-emerald-700 hover:text-emerald-800 font-semibold underline underline-offset-2"
-              >
-                ⚡ Chế độ Giám khảo (Đăng nhập 1-chạm)
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -304,6 +314,7 @@ export function App() {
           plant={selectedPlant}
           onClose={() => setSelectedPlant(null)}
           onOpenMapLocation={handleLocateOnMap}
+          onAddMonitoringLog={handleAddMonitoringLog}
         />
       )}
 

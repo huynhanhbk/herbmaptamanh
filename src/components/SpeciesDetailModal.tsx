@@ -2,7 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { 
   MedicinalPlant, 
-  ConservationLevel 
+  ConservationLevel,
+  PlantMonitoringLog,
+  PlantOccurrenceStatus,
+  getConservationStatusLabel
 } from '../types';
 import { 
   X, 
@@ -22,32 +25,96 @@ import {
   Copy,
   TreePine,
   Layers,
-  ChevronRight
+  ChevronRight,
+  History,
+  PlusCircle,
+  Clock,
+  Calendar,
+  EyeOff,
+  CheckCircle,
+  FileEdit,
+  Camera
 } from 'lucide-react';
 
 interface SpeciesDetailModalProps {
   plant: MedicinalPlant | null;
   onClose: () => void;
   onOpenMapLocation?: (plant: MedicinalPlant) => void;
+  onAddMonitoringLog?: (plantId: string, log: Omit<PlantMonitoringLog, 'id' | 'createdAt'>) => void;
 }
 
 export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
   plant,
   onClose,
   onOpenMapLocation,
+  onAddMonitoringLog,
 }) => {
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showQRCard, setShowQRCard] = useState(false);
+  const [isAddingLog, setIsAddingLog] = useState(false);
+
+  // New log form state
+  const [newLogDate, setNewLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newLogStatus, setNewLogStatus] = useState<PlantOccurrenceStatus>('present');
+  const [newLogSurveyor, setNewLogSurveyor] = useState<string>('Nhóm STEM KHKT - THCS Tam Anh');
+  const [newLogNote, setNewLogNote] = useState<string>('');
+  const [newLogPhoto, setNewLogPhoto] = useState<string>('');
+  const logPhotoInputRef = useRef<HTMLInputElement>(null);
+
   const qrCanvasRef = useRef<HTMLDivElement>(null);
 
   // Reset states when plant changes
   useEffect(() => {
     setActivePhotoIndex(0);
     setShowQRCard(false);
+    setIsAddingLog(false);
+    setNewLogDate(new Date().toISOString().split('T')[0]);
+    setNewLogStatus('present');
+    setNewLogSurveyor('Nhóm STEM KHKT - THCS Tam Anh');
+    setNewLogNote('');
+    setNewLogPhoto('');
   }, [plant?.id]);
 
   if (!plant) return null;
+
+  const isDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
+
+  // Sort logs by date descending
+  const monitoringLogs = [...(plant.monitoringLogs || [])].sort(
+    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setNewLogPhoto(ev.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSubmitNewLog = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLogDate || !newLogNote.trim() || !newLogSurveyor.trim()) {
+      alert('Vui lòng điền đầy đủ ngày kiểm tra, người giám sát và ghi chú tình trạng thực địa.');
+      return;
+    }
+
+    if (onAddMonitoringLog) {
+      onAddMonitoringLog(plant.id, {
+        date: newLogDate,
+        status: newLogStatus,
+        statusNote: newLogNote.trim(),
+        surveyor: newLogSurveyor.trim(),
+        evidencePhoto: newLogPhoto || undefined,
+      });
+      setIsAddingLog(false);
+      setNewLogNote('');
+      setNewLogPhoto('');
+    }
+  };
 
   // Generate permanent URL for this plant
   const currentUrl = typeof window !== 'undefined' ? window.location.origin : '';
@@ -110,7 +177,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
         <div className="text-left bg-stone-100/80 p-3 rounded-xl mb-4 text-xs space-y-1">
           <p>📍 <b>Vị trí:</b> {plant.location.addressDescription}</p>
           <p>🧭 <b>Tọa độ:</b> {plant.location.lat.toFixed(5)}, {plant.location.lng.toFixed(5)}</p>
-          <p>🛡️ <b>Tình trạng:</b> {plant.conservationStatus}</p>
+          <p>🛡️ <b>Tình trạng:</b> {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}</p>
         </div>
 
         <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-lg text-[10px] text-amber-900 font-medium">
@@ -167,6 +234,26 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
         {/* Scrollable Content Body */}
         <div className="overflow-y-auto p-4 sm:p-6 space-y-6 text-stone-800">
+          {/* Disappeared Alert Banner if latest status is disappeared */}
+          {isDisappeared && (
+            <div className="bg-rose-950/90 text-rose-100 p-4 rounded-2xl border-2 border-rose-600 flex items-start gap-3 shadow-lg animate-fadeIn">
+              <div className="p-2 rounded-xl bg-rose-900/80 text-rose-300 shrink-0 mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-rose-300" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm text-white">ĐÃ BIẾN MẤT TẠI TỌA ĐỘ NÀY (ĐỢT GIÁM SÁT MỚI NHẤT)</span>
+                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-rose-800 text-rose-200 border border-rose-600">
+                    Đã gỡ khỏi bản đồ
+                  </span>
+                </div>
+                <p className="text-xs text-rose-200 leading-relaxed">
+                  Ở đợt kiểm tra thực địa gần nhất, loài cây này không còn được tìm thấy tại vị trí đã ghi nhận trước đó. Điểm đánh dấu trên Bản đồ số đã được tự động gỡ bỏ để đảm bảo dữ liệu luôn cập nhật đúng thực tế. Bạn có thể xem diễn biến chi tiết trong mục <b>Lịch sử giám sát</b> bên dưới hoặc thêm đợt kiểm tra mới nếu cây tái sinh.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* QR Card Drawer if opened */}
           {showQRCard && (
             <div className="bg-gradient-to-br from-emerald-950 to-stone-900 p-5 rounded-2xl text-white border border-emerald-800/60 shadow-xl space-y-4 animate-slideDown">
@@ -269,7 +356,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                       ? 'bg-amber-100 text-amber-800' 
                       : 'bg-emerald-100 text-emerald-800'
                   }`}>
-                    {plant.conservationStatus}
+                    {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -415,6 +502,281 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
               <span className="text-[11px] text-emerald-800 font-semibold px-2 py-0.5 rounded bg-emerald-100 border border-emerald-300 shrink-0">
                 ✓ Đã xin phép chia sẻ
               </span>
+            </div>
+          </div>
+
+          {/* Lịch sử Giám sát & Biến động Thực địa (Monitoring & Status Timeline) */}
+          <div className="bg-stone-50 p-4 sm:p-5 rounded-2xl border border-stone-200 space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-xl bg-stone-200 text-stone-700">
+                  <History className="w-5 h-5" />
+                </span>
+                <div>
+                  <h3 className="text-sm font-bold text-stone-900 uppercase tracking-tight">
+                    Lịch sử Giám sát & Biến động Thực địa
+                  </h3>
+                  <p className="text-[11px] text-stone-500">
+                    Theo dõi biến động cá thể theo thời gian tại tọa độ ({plant.location.lat.toFixed(5)}, {plant.location.lng.toFixed(5)})
+                  </p>
+                </div>
+              </div>
+
+              {onAddMonitoringLog && (
+                <button
+                  type="button"
+                  onClick={() => setIsAddingLog(!isAddingLog)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
+                    isAddingLog
+                      ? 'bg-stone-800 text-stone-200'
+                      : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                  }`}
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>{isAddingLog ? 'Đóng biểu mẫu' : 'Ghi nhận đợt kiểm tra mới'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Add Log Form */}
+            {isAddingLog && (
+              <form onSubmit={handleSubmitNewLog} className="p-4 bg-white rounded-2xl border-2 border-emerald-600/60 shadow-md space-y-3 animate-fadeIn">
+                <div className="flex items-center justify-between border-b border-stone-100 pb-2">
+                  <h4 className="text-xs font-bold text-emerald-900 uppercase flex items-center gap-1.5">
+                    <FileEdit className="w-4 h-4 text-emerald-600" />
+                    Cập nhật diễn biến cây tại thực địa
+                  </h4>
+                  <span className="text-[10px] text-stone-400">Tự động cập nhật hiển thị Bản đồ</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      Ngày khảo sát / Giám sát:
+                    </label>
+                    <div className="relative">
+                      <Calendar className="w-3.5 h-3.5 absolute left-3 top-2.5 text-stone-400" />
+                      <input
+                        type="date"
+                        required
+                        value={newLogDate}
+                        onChange={(e) => setNewLogDate(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                      Người / Nhóm kiểm tra:
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="VD: Nhóm KHKT THCS Tam Anh"
+                      value={newLogSurveyor}
+                      onChange={(e) => setNewLogSurveyor(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-700 mb-1.5">
+                    Tình trạng bảo tồn & xuất hiện tại tọa độ:
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                      newLogStatus === 'present' 
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-400' 
+                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="occurrenceStatus"
+                        value="present"
+                        checked={newLogStatus === 'present'}
+                        onChange={() => setNewLogStatus('present')}
+                        className="text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <div className="text-[11px]">
+                        <span className="font-bold block">🟢 Còn tồn tại</span>
+                        <span className="text-[10px] text-stone-500">Phát triển tốt/bình thường</span>
+                      </div>
+                    </label>
+
+                    <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                      newLogStatus === 'degraded' 
+                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-1 ring-amber-400' 
+                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="occurrenceStatus"
+                        value="degraded"
+                        checked={newLogStatus === 'degraded'}
+                        onChange={() => setNewLogStatus('degraded')}
+                        className="text-amber-600 focus:ring-amber-500"
+                      />
+                      <div className="text-[11px]">
+                        <span className="font-bold block">🟡 Bị suy thoái</span>
+                        <span className="text-[10px] text-stone-500">Suy giảm cá thể/sâu bệnh</span>
+                      </div>
+                    </label>
+
+                    <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                      newLogStatus === 'disappeared' 
+                        ? 'bg-rose-50 border-rose-500 text-rose-900 ring-1 ring-rose-400' 
+                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="occurrenceStatus"
+                        value="disappeared"
+                        checked={newLogStatus === 'disappeared'}
+                        onChange={() => setNewLogStatus('disappeared')}
+                        className="text-rose-600 focus:ring-rose-500"
+                      />
+                      <div className="text-[11px]">
+                        <span className="font-bold block">🔴 Đã biến mất</span>
+                        <span className="text-[10px] text-rose-600 font-semibold">Tự động xóa khỏi bản đồ</span>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-stone-700 mb-1">
+                    Ghi chú chi tiết nguyên nhân & hiện trạng thực địa:
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    placeholder="VD: Tháng 06/2026 kiểm tra lại, vị trí đất đã bị san ủi mở đường, không còn thấy cây thuốc..."
+                    value={newLogNote}
+                    onChange={(e) => setNewLogNote(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => logPhotoInputRef.current?.click()}
+                      className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold flex items-center gap-1.5 border border-stone-200"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-stone-500" />
+                      <span>{newLogPhoto ? 'Thay ảnh thực địa' : 'Đính kèm ảnh'}</span>
+                    </button>
+                    <input
+                      ref={logPhotoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoUpload}
+                      className="hidden"
+                    />
+                    {newLogPhoto && (
+                      <span className="text-[11px] text-emerald-700 font-semibold flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Đã chọn ảnh
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingLog(false)}
+                      className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-medium"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors"
+                    >
+                      Lưu đợt giám sát
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            {/* Monitoring Timeline List */}
+            <div className="space-y-3">
+              {monitoringLogs.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white border border-stone-200 text-center text-xs text-stone-500">
+                  Chưa có lịch sử giám sát ghi nhận. Đợt ghi nhận ban đầu: <b>{plant.dataSource.surveyDate}</b>
+                </div>
+              ) : (
+                <div className="relative pl-6 space-y-4 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-stone-200">
+                  {monitoringLogs.map((log, index) => {
+                    const isLatest = index === 0;
+                    let dotColor = 'bg-emerald-500 ring-emerald-200';
+                    let badgeBg = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                    let statusTitle = 'Còn tồn tại & Phát triển';
+
+                    if (log.status === 'disappeared') {
+                      dotColor = 'bg-rose-600 ring-rose-200';
+                      badgeBg = 'bg-rose-100 text-rose-800 border-rose-300';
+                      statusTitle = 'Đã biến mất tại vị trí';
+                    } else if (log.status === 'degraded') {
+                      dotColor = 'bg-amber-500 ring-amber-200';
+                      badgeBg = 'bg-amber-100 text-amber-800 border-amber-200';
+                      statusTitle = 'Suy thoái / Suy giảm cá thể';
+                    }
+
+                    return (
+                      <div key={log.id || index} className="relative group">
+                        {/* Timeline Pin */}
+                        <div className={`absolute -left-6 top-1.5 w-3.5 h-3.5 rounded-full ${dotColor} ring-4 ring-white border border-white shadow-xs`} />
+
+                        <div className={`p-3.5 rounded-2xl border transition-all ${
+                          isLatest 
+                            ? 'bg-white border-stone-300 shadow-sm' 
+                            : 'bg-stone-50/70 border-stone-200 text-stone-600'
+                        }`}>
+                          <div className="flex items-center justify-between flex-wrap gap-1.5 mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-stone-900 flex items-center gap-1">
+                                <Calendar className="w-3.5 h-3.5 text-stone-400" />
+                                {log.date}
+                              </span>
+                              {isLatest && (
+                                <span className="text-[9px] uppercase font-extrabold px-1.5 py-0.2 rounded bg-stone-900 text-white">
+                                  Mới nhất
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                              {statusTitle}
+                            </span>
+                          </div>
+
+                          <p className="text-xs text-stone-700 leading-relaxed mb-2">
+                            {log.statusNote}
+                          </p>
+
+                          {log.evidencePhoto && (
+                            <div className="mb-2 w-24 h-24 rounded-xl overflow-hidden border border-stone-200">
+                              <img src={log.evidencePhoto} alt="Ảnh thực địa" className="w-full h-full object-cover" />
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between text-[11px] text-stone-500 pt-1.5 border-t border-stone-100">
+                            <span>👤 Người giám sát: <b>{log.surveyor}</b></span>
+                            {log.status === 'disappeared' && (
+                              <span className="text-rose-600 font-semibold flex items-center gap-1">
+                                <EyeOff className="w-3 h-3" /> Đã xóa đánh dấu trên bản đồ
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 

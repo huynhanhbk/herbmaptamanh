@@ -117,8 +117,6 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
               5. Tài liệu tham khảo chính:
             </h3>
             <ul className="space-y-1 text-[11px] list-disc list-inside">
-              <li>GS. Đỗ Tất Lợi (2004), <i>Những cây thuốc và vị thuốc Việt Nam</i>, NXB Y học.</li>
-              <li>Viện Dược liệu (2016), <i>Cây thuốc và động vật làm thuốc ở Việt Nam</i>, NXB Khoa học và Kỹ thuật.</li>
               <li>Báo cáo điều tra thực địa cây thuốc dân gian xã Tam Anh (Đề tài KHKT 2026).</li>
             </ul>
           </div>
@@ -127,7 +125,7 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
         {/* Footer */}
         <div className="bg-stone-50 px-6 py-3.5 border-t border-stone-200 flex items-center justify-between">
           <span className="text-[11px] text-stone-500 font-medium">
-            HerbMap Tam Anh — Sản phẩm vì cộng đồng & bảo tồn sinh thái
+            HerbMap Tam Anh — Thực hiện bởi cô Lê Thị Như - Trường THCS Nguyễn Khuyến
           </span>
           <button
             onClick={onClose}
