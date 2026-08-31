@@ -11,6 +11,7 @@ import { SurveyEntryModal } from './components/SurveyEntryModal';
 import { AboutProjectModal } from './components/AboutProjectModal';
 import { MedicinalPlant, AICandidate, PlantMonitoringLog } from './types';
 import { getStoredPlants, saveNewPlant, verifyAdminPasscode, checkAndRunDailyAutoBackup, addPlantMonitoringLog } from './utils/storage';
+import { subscribeToPlantsRealtime, syncInitialPlantsToFirestore } from './lib/plantSync';
 import { Lock, CheckCircle, X, ShieldAlert } from 'lucide-react';
 
 export function App() {
@@ -45,10 +46,24 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load plants on mount and trigger auto backup check
+  // Load plants on mount, sync with cloud Firestore in real-time, and trigger auto backup check
   useEffect(() => {
     const loaded = getStoredPlants();
     setPlants(loaded);
+
+    // Initial check & seed to Firestore if cloud is fresh
+    syncInitialPlantsToFirestore().catch((e) => console.warn('Firestore initial sync check:', e));
+
+    // Subscribe to real-time changes across all connected devices (phones, computers, browsers)
+    const unsubscribe = subscribeToPlantsRealtime((cloudPlants) => {
+      setPlants(cloudPlants);
+      // If currently viewing a plant that got updated on another device, keep detail modal in sync
+      setSelectedPlant((prev) => {
+        if (!prev) return null;
+        const updated = cloudPlants.find((p) => p.id === prev.id);
+        return updated || prev;
+      });
+    });
 
     // Run automatic daily backup snapshot check
     try {
@@ -73,6 +88,10 @@ export function App() {
         setActiveTab(tabParam);
       }
     }
+
+    return () => {
+      unsubscribe();
+    };
   }, []);
 
   // Handle open plant detail

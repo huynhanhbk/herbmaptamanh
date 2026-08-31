@@ -1,0 +1,15 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read and write for medicinal plants real-time collaboration in Herbmap Tam Anh
+    match /plants/{plantId} {
+      allow read, write: if true;
+    }
+    match /surveys/{surveyId} {
+      allow read, write: if true;
+    }
+    match /system_metadata/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

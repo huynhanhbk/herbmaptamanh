@@ -12,6 +12,11 @@ import {
   getConservationStatusLabel
 } from '../types';
 import { INITIAL_PLANTS_DATA } from '../data/plants';
+import { 
+  savePlantToFirestore, 
+  deletePlantFromFirestore, 
+  batchSavePlantsToFirestore 
+} from '../lib/plantSync';
 
 const STORAGE_KEY = 'herbmap_tamanh_plants_v2';
 const ADMIN_PASSCODE_KEY = 'herbmap_tamanh_admin_pw';
@@ -250,6 +255,7 @@ export function addPlant(
 
     const updated = deduplicatePlants([newPlant, ...currentPlants]);
     savePlants(updated);
+    savePlantToFirestore(newPlant);
     return newPlant;
   }
 
@@ -282,6 +288,7 @@ export function addPlant(
   currentPlants[existingIndex] = updatedExistingPlant;
   const updated = deduplicatePlants(currentPlants);
   savePlants(updated);
+  savePlantToFirestore(updatedExistingPlant);
   return updatedExistingPlant;
 }
 
@@ -342,6 +349,7 @@ export function addPlantMonitoringLog(
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
+  savePlantToFirestore(updatedPlant);
   return getStoredPlants();
 }
 
@@ -358,6 +366,7 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
+  savePlantToFirestore(updatedPlant);
   return updatedPlant;
 }
 
@@ -366,6 +375,7 @@ export function deletePlant(id: string): boolean {
   const filtered = currentPlants.filter((p) => p.id !== id);
   if (filtered.length !== currentPlants.length) {
     savePlants(filtered);
+    deletePlantFromFirestore(id);
     return true;
   }
   return false;
@@ -373,6 +383,7 @@ export function deletePlant(id: string): boolean {
 
 export function resetToDefaultData(): MedicinalPlant[] {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PLANTS_DATA));
+  batchSavePlantsToFirestore(INITIAL_PLANTS_DATA);
   return INITIAL_PLANTS_DATA;
 }
 
@@ -634,6 +645,7 @@ export function importPlantsFromJSON(jsonText: string, mode: 'merge' | 'replace'
     }
 
     savePlants(resultList);
+    batchSavePlantsToFirestore(resultList);
 
     return {
       success: true,
@@ -807,6 +819,7 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
     }
 
     savePlants(resultList);
+    batchSavePlantsToFirestore(resultList);
 
     return {
       success: true,
@@ -901,6 +914,7 @@ export function restoreFromBackup(backupId: string): MedicinalPlant[] | null {
     return null;
   }
   savePlants(target.plants);
+  batchSavePlantsToFirestore(target.plants);
   return target.plants;
 }
 

@@ -1,0 +1,32 @@
+{
+  "entities": {
+    "plants": {
+      "title": "Cây thuốc & Điểm phân bố",
+      "description": "Danh lục các cây thuốc và tọa độ thực địa xã Tam Anh",
+      "fields": {
+        "id": { "type": "string", "description": "Mã định danh cây thuốc, ví dụ TA-HERB-001" },
+        "vietnameseName": { "type": "string", "description": "Tên tiếng Việt" },
+        "scientificName": { "type": "string", "description": "Tên khoa học" },
+        "family": { "type": "string", "description": "Họ thực vật" },
+        "coverImage": { "type": "string", "description": "Ảnh đại diện" },
+        "photos": { "type": "array", "description": "Danh sách hình ảnh thực địa" },
+        "shortDescription": { "type": "string", "description": "Mô tả ngắn" },
+        "identificationTraits": { "type": "object", "description": "Đặc điểm nhận dạng" },
+        "habitat": { "type": "string", "description": "Sinh cảnh" },
+        "habitatCategory": { "type": "string", "description": "Phân loại sinh cảnh" },
+        "location": { "type": "object", "description": "Tọa độ vĩ độ, kinh độ và địa chỉ" },
+        "conservationStatus": { "type": "string", "description": "Trạng thái bảo tồn" },
+        "conservationLevel": { "type": "string", "description": "Mức độ bảo tồn" },
+        "traditionalUses": { "type": "object", "description": "Tri thức dân gian và bài thuốc" },
+        "dataSource": { "type": "object", "description": "Nguồn dữ liệu và người khảo sát" },
+        "status": { "type": "string", "description": "Trạng thái duyệt ('verified' | 'pending')" },
+        "surveyFrequencyCount": { "type": "number", "description": "Tần suất ghi nhận khảo sát" },
+        "occurrenceStatus": { "type": "string", "description": "Hiện trạng tồn tại ('present' | 'degraded' | 'disappeared')" },
+        "isDisappeared": { "type": "boolean", "description": "Đã biến mất tại tọa độ này hay chưa" },
+        "monitoringLogs": { "type": "array", "description": "Lịch sử các đợt khảo sát" },
+        "createdAt": { "type": "string", "description": "Thời gian tạo ISO" },
+        "updatedAt": { "type": "string", "description": "Thời gian cập nhật ISO" }
+      }
+    }
+  }
+}

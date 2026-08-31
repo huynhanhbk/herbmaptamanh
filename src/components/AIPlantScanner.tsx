@@ -17,6 +17,7 @@ import {
   Image as ImageIcon
 } from 'lucide-react';
 import { AICandidate, AIIdentificationResult, MedicinalPlant } from '../types';
+import { identifyPlantWithAI } from '../utils/aiVision';
 
 interface AIPlantScannerProps {
   isOpen: boolean;
@@ -142,22 +143,18 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
     }, 1500);
 
     try {
-      const response = await fetch('/api/identify-plant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageBase64: selectedImage,
-          mimeType: mimeType,
-          userNotes: userNotes,
-        }),
+      const data = await identifyPlantWithAI({
+        imageBase64: selectedImage,
+        mimeType: mimeType,
+        userNotes: userNotes,
+        existingPlants: existingPlants,
       });
 
-      const json = await response.json();
-      if (!json.success || !json.data) {
-        throw new Error(json.error || 'Không nhận diện được hình ảnh. Vui lòng thử lại.');
+      if (!data || !data.candidates || data.candidates.length === 0) {
+        throw new Error('Không nhận diện được hình ảnh. Vui lòng thử lại với ảnh rõ nét hơn.');
       }
 
-      setAnalysisResult(json.data);
+      setAnalysisResult(data);
     } catch (err: any) {
       console.error('AI identification error:', err);
       setErrorMsg(err.message || 'Lỗi kết nối tới mô hình AI. Vui lòng thử lại với ảnh rõ nét hơn.');

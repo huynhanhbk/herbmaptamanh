@@ -120,6 +120,10 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-[9px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/80 hidden sm:inline-block">
                   KHKT 2026
                 </span>
+                <span className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-full bg-emerald-900/60 text-emerald-300 border border-emerald-700/50" title="Đồng bộ đám mây thời gian thực trên mọi thiết bị">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                  <span>Live Sync</span>
+                </span>
               </div>
               <p className="text-[10px] sm:text-[11px] text-stone-400 font-medium tracking-tight mt-1 hidden md:block">
                 Bản đồ số & CSDL Dược liệu
