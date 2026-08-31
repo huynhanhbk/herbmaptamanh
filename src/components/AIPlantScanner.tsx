@@ -14,15 +14,10 @@ import {
   Layers,
   Search,
   ScanLine,
-  Image as ImageIcon,
-  Key,
-  ChevronDown,
-  ChevronUp,
-  Check,
-  ShieldCheck
+  Image as ImageIcon
 } from 'lucide-react';
 import { AICandidate, AIIdentificationResult, MedicinalPlant } from '../types';
-import { identifyPlantWithAI, getClientGeminiApiKey, saveClientGeminiApiKey } from '../utils/aiVision';
+import { identifyPlantWithAI } from '../utils/aiVision';
 
 interface AIPlantScannerProps {
   isOpen: boolean;
@@ -47,31 +42,8 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
   const [analysisResult, setAnalysisResult] = useState<AIIdentificationResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Gemini API Key config state for Vercel / Client
-  const [showApiKeyConfig, setShowApiKeyConfig] = useState<boolean>(false);
-  const [apiKeyInput, setApiKeyInput] = useState<string>('');
-  const [activeApiKey, setActiveApiKey] = useState<string>('');
-  const [savedKeySuccess, setSavedKeySuccess] = useState<boolean>(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-
-  // Check stored API key on mount/open
-  useEffect(() => {
-    if (isOpen) {
-      const key = getClientGeminiApiKey();
-      setActiveApiKey(key);
-      setApiKeyInput(key);
-    }
-  }, [isOpen]);
-
-  const handleSaveApiKey = () => {
-    saveClientGeminiApiKey(apiKeyInput);
-    const key = getClientGeminiApiKey();
-    setActiveApiKey(key);
-    setSavedKeySuccess(true);
-    setTimeout(() => setSavedKeySuccess(false), 2500);
-  };
 
   // Clean reset function for the scanner
   const handleResetScanner = () => {
@@ -275,84 +247,6 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
                 Kết quả AI chỉ đóng vai trò <b>gợi ý ban đầu hỗ trợ học tập & khảo sát</b>. Cần đối chiếu với mô tả hình thái thực tế và xác nhận từ thầy cô/chuyên gia trước khi ghi nhận chính thức hoặc ứng dụng.
               </p>
             </div>
-          </div>
-
-          {/* Vercel & Client AI Engine Optimization Panel */}
-          <div className="rounded-2xl border border-stone-200 bg-stone-50/80 overflow-hidden text-xs">
-            <button
-              type="button"
-              onClick={() => setShowApiKeyConfig(!showApiKeyConfig)}
-              className="w-full px-3.5 py-2.5 flex items-center justify-between hover:bg-stone-100/80 transition-colors text-left"
-            >
-              <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${activeApiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'}`} />
-                <span className="font-semibold text-stone-800 flex items-center gap-1.5">
-                  <Key className="w-3.5 h-3.5 text-emerald-600" />
-                  Mô hình nhận diện AI (Hỗ trợ Vercel & Client di động)
-                </span>
-                {activeApiKey ? (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                    Gemini Flash: Đã kích hoạt
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full bg-stone-200 text-stone-700 text-[10px]">
-                    Tự động (Backend / Client Vision)
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1 text-stone-500">
-                <span className="text-[11px]">{showApiKeyConfig ? 'Ẩn cài đặt' : 'Cấu hình'}</span>
-                {showApiKeyConfig ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </div>
-            </button>
-
-            {showApiKeyConfig && (
-              <div className="p-3.5 border-t border-stone-200 bg-white space-y-3">
-                <div className="text-stone-600 text-[11px] leading-relaxed space-y-1">
-                  <p className="font-semibold text-stone-800">
-                    💡 Hướng dẫn tối ưu nhận diện chính xác 100% khi chạy trên Vercel:
-                  </p>
-                  <p>
-                    • <b>Cách 1 (Khuyên dùng cho Vercel):</b> Thêm biến môi trường <code className="bg-stone-100 px-1 py-0.5 rounded text-emerald-700 font-mono">GEMINI_API_KEY</code> trong <i>Vercel Project Settings → Environment Variables</i>.
-                  </p>
-                  <p>
-                    • <b>Cách 2 (Trực tiếp trên Client/Điện thoại):</b> Dán trực tiếp khóa Google Gemini API Key miễn phí (lấy tại <i>aistudio.google.com</i>) vào ô bên dưới. Khóa sẽ được lưu an toàn trên trình duyệt của bạn.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="password"
-                    value={apiKeyInput}
-                    onChange={(e) => setApiKeyInput(e.target.value)}
-                    placeholder="Dán Gemini API Key (AIzaSy...)"
-                    className="flex-1 px-3 py-1.5 text-xs rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleSaveApiKey}
-                    className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs flex items-center gap-1 transition-colors shrink-0"
-                  >
-                    {savedKeySuccess ? <Check className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
-                    <span>{savedKeySuccess ? 'Đã lưu!' : 'Lưu khóa'}</span>
-                  </button>
-                  {activeApiKey && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setApiKeyInput('');
-                        saveClientGeminiApiKey('');
-                        setActiveApiKey('');
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs transition-colors shrink-0"
-                      title="Xóa khóa đã lưu"
-                    >
-                      Xóa
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Upload / Capture Section if no image */}
