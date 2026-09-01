@@ -32,6 +32,7 @@ import {
   CommuneVillage
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface SurveyEntryModalProps {
   isOpen: boolean;
@@ -372,16 +373,21 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setValidationError(null);
   };
 
-  // Handle Photo upload
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Photo upload with automatic compression
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCoverImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 1200, 1200, 0.78);
+      setCoverImage(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

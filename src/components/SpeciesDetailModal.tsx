@@ -7,6 +7,7 @@ import {
   PlantOccurrenceStatus,
   getConservationStatusLabel
 } from '../types';
+import { compressImageFile } from '../utils/imageCompressor';
 import { 
   X, 
   MapPin, 
@@ -85,14 +86,19 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setNewLogPhoto(ev.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const compressed = await compressImageFile(file, 1000, 1000, 0.75);
+      setNewLogPhoto(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setNewLogPhoto(ev.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmitNewLog = (e: React.FormEvent) => {

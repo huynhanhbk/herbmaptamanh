@@ -22,6 +22,7 @@ import {
   COMMUNE_VILLAGES,
   CommuneVillage
 } from '../types';
+import { compressImageFile } from '../utils/imageCompressor';
 
 interface EditPlantModalProps {
   plant: MedicinalPlant | null;
@@ -107,37 +108,20 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      // Compress in canvas if large
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const maxDim = 1000;
-        let width = img.width;
-        let height = img.height;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        setCoverImage(canvas.toDataURL('image/jpeg', 0.85));
+    try {
+      const compressed = await compressImageFile(file, 1000, 1000, 0.78);
+      setCoverImage(compressed);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setCoverImage(reader.result as string);
       };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {

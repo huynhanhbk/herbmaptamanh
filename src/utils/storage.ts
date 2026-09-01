@@ -18,12 +18,37 @@ import {
   deletePlantFromFirestore, 
   batchSavePlantsToFirestore 
 } from '../lib/plantSync';
+import {
+  idbSaveAllPlants,
+  idbGetAllPlants,
+  idbSaveBackups,
+  idbGetAllBackups
+} from './idbStorage';
 
 const STORAGE_KEY = 'herbmap_tamanh_plants_v2';
 const ADMIN_PASSCODE_KEY = 'herbmap_tamanh_admin_pw';
 const BACKUPS_STORAGE_KEY = 'herbmap_tamanh_backups_v1';
 const AUTO_BACKUP_ENABLED_KEY = 'herbmap_tamanh_auto_backup_enabled';
 const DEFAULT_PASSCODE = 'admin2026';
+
+// Active in-memory caches to ensure ultra-fast and complete synchronous access
+let inMemoryPlantsCache: MedicinalPlant[] | null = null;
+let inMemoryBackupsCache: BackupSnapshot[] | null = null;
+
+// Background initial load from IndexedDB if available
+if (typeof window !== 'undefined') {
+  idbGetAllPlants().then((idbPlants) => {
+    if (idbPlants && Array.isArray(idbPlants) && idbPlants.length > 0) {
+      inMemoryPlantsCache = deduplicatePlants(idbPlants.map(migratePlantRecord));
+    }
+  }).catch(() => {});
+
+  idbGetAllBackups().then((idbBackups) => {
+    if (idbBackups && Array.isArray(idbBackups) && idbBackups.length > 0) {
+      inMemoryBackupsCache = idbBackups;
+    }
+  }).catch(() => {});
+}
 
 function migratePlantRecord(p: any): MedicinalPlant {
   let habitatCategory: HabitatCategory = 'garden';
@@ -153,7 +178,46 @@ export function deduplicatePlants(plants: MedicinalPlant[]): MedicinalPlant[] {
   return Array.from(seenMap.values());
 }
 
+function createCompactPlantsForLocalStorage(plants: MedicinalPlant[]): MedicinalPlant[] {
+  return plants.map((p) => {
+    const isLargeBase64 = (url?: string) => Boolean(url && url.startsWith('data:') && url.length > 30000);
+    
+    let coverImage = p.coverImage;
+    if (isLargeBase64(coverImage)) {
+      coverImage = 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
+    }
+
+    const photos = (p.photos || []).map((ph) => {
+      if (isLargeBase64(ph.url)) {
+        return {
+          ...ph,
+          url: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'
+        };
+      }
+      return ph;
+    });
+
+    const monitoringLogs = (p.monitoringLogs || []).map((log) => {
+      if (isLargeBase64(log.evidencePhoto)) {
+        return { ...log, evidencePhoto: undefined };
+      }
+      return log;
+    });
+
+    return {
+      ...p,
+      coverImage,
+      photos,
+      monitoringLogs
+    };
+  });
+}
+
 export function getStoredPlants(): MedicinalPlant[] {
+  if (inMemoryPlantsCache && inMemoryPlantsCache.length > 0) {
+    return inMemoryPlantsCache;
+  }
+
   try {
     const data = localStorage.getItem(STORAGE_KEY);
     if (!data) {
@@ -164,7 +228,11 @@ export function getStoredPlants(): MedicinalPlant[] {
           const parsed = JSON.parse(legacyData);
           if (Array.isArray(parsed) && parsed.length > 0) {
             const migrated = deduplicatePlants(parsed.map(migratePlantRecord));
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            inMemoryPlantsCache = migrated;
+            idbSaveAllPlants(migrated).catch(() => {});
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
+            } catch {}
             return migrated;
           }
         } catch {
@@ -172,32 +240,63 @@ export function getStoredPlants(): MedicinalPlant[] {
         }
       }
       const deduplicatedInitial = deduplicatePlants(INITIAL_PLANTS_DATA);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicatedInitial));
+      inMemoryPlantsCache = deduplicatedInitial;
+      idbSaveAllPlants(deduplicatedInitial).catch(() => {});
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicatedInitial));
+      } catch {}
       return deduplicatedInitial;
     }
+
     const parsed = JSON.parse(data);
     if (Array.isArray(parsed)) {
       const migrated = parsed.map(migratePlantRecord);
       const deduplicated = deduplicatePlants(migrated);
-      // If duplicates existed in localStorage, auto-heal and rewrite clean array
-      if (deduplicated.length !== parsed.length) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
-      }
+      inMemoryPlantsCache = deduplicated;
+      idbSaveAllPlants(deduplicated).catch(() => {});
       return deduplicated;
     }
-    return deduplicatePlants(INITIAL_PLANTS_DATA);
+    const fallback = deduplicatePlants(INITIAL_PLANTS_DATA);
+    inMemoryPlantsCache = fallback;
+    return fallback;
   } catch (err) {
-    console.error('Error reading localStorage:', err);
-    return deduplicatePlants(INITIAL_PLANTS_DATA);
+    console.warn('Error reading localStorage, using initial data:', err);
+    const fallback = deduplicatePlants(INITIAL_PLANTS_DATA);
+    inMemoryPlantsCache = fallback;
+    return fallback;
   }
 }
 
 export function savePlants(plants: MedicinalPlant[]): void {
   try {
     const deduplicated = deduplicatePlants(plants);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
+    inMemoryPlantsCache = deduplicated;
+    
+    // 1. Asynchronously persist full-fidelity data into IndexedDB (virtually unlimited capacity)
+    idbSaveAllPlants(deduplicated).catch((err) => {
+      console.warn('IndexedDB save warning:', err);
+    });
+
+    // 2. Try saving to localStorage
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
+    } catch (quotaErr) {
+      console.warn('LocalStorage quota reached. Purging bloated backups and saving compact payload...');
+      // Clean up backups from localStorage (they are preserved safely in IndexedDB)
+      try {
+        localStorage.removeItem(BACKUPS_STORAGE_KEY);
+      } catch {}
+
+      // Save compact version without heavy base64 strings in localStorage
+      try {
+        const compact = createCompactPlantsForLocalStorage(deduplicated);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+      } catch (secondaryErr) {
+        console.warn('LocalStorage compact save skipped, persisted safely in IndexedDB and memory.', secondaryErr);
+      }
+    }
   } catch (err) {
-    console.error('Error saving to localStorage:', err);
+    console.error('Error saving plants:', err);
   }
 }
 
@@ -988,22 +1087,68 @@ export function setAutoBackupEnabled(enabled: boolean): void {
 }
 
 export function getDailyBackups(): BackupSnapshot[] {
+  if (inMemoryBackupsCache && inMemoryBackupsCache.length > 0) {
+    return inMemoryBackupsCache;
+  }
+
   try {
     const raw = localStorage.getItem(BACKUPS_STORAGE_KEY);
     if (!raw) return [];
     const list: BackupSnapshot[] = JSON.parse(raw);
-    return Array.isArray(list) ? list : [];
+    const validList = Array.isArray(list) ? list : [];
+    inMemoryBackupsCache = validList;
+    return validList;
   } catch (err) {
-    console.error('Error loading backups:', err);
+    console.warn('Error loading backups:', err);
     return [];
   }
 }
 
 export function saveBackupsList(backups: BackupSnapshot[]): void {
   try {
-    // Keep max 15 recent snapshots to preserve local storage limits
-    const sorted = [...backups].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 15);
-    localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(sorted));
+    const sorted = [...backups]
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 10);
+    
+    inMemoryBackupsCache = sorted;
+
+    // 1. Save full backups with plants array into IndexedDB
+    idbSaveBackups(sorted).catch((err) => {
+      console.warn('IndexedDB saveBackups warning:', err);
+    });
+
+    // 2. In localStorage, store only slim headers (no massive plants array duplication)
+    const slimList = sorted.map((b) => ({
+      id: b.id,
+      timestamp: b.timestamp,
+      date: b.date,
+      timeString: b.timeString,
+      plantCount: b.plantCount,
+      plants: b.plants && b.plants.length > 0 ? createCompactPlantsForLocalStorage(b.plants) : [],
+      type: b.type,
+      note: b.note,
+      sizeKb: b.sizeKb
+    }));
+
+    try {
+      localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(slimList));
+    } catch (quotaErr) {
+      console.warn('LocalStorage quota limit reached on backups. Storing zero-payload headers in localStorage.');
+      const minimalList = sorted.map((b) => ({
+        id: b.id,
+        timestamp: b.timestamp,
+        date: b.date,
+        timeString: b.timeString,
+        plantCount: b.plantCount,
+        plants: [],
+        type: b.type,
+        note: b.note,
+        sizeKb: b.sizeKb
+      }));
+      try {
+        localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(minimalList));
+      } catch {}
+    }
   } catch (err) {
     console.error('Error saving backup list:', err);
   }
@@ -1042,10 +1187,18 @@ export function createBackup(type: 'auto_daily' | 'manual' = 'manual', note?: st
 
 export function restoreFromBackup(backupId: string): MedicinalPlant[] | null {
   const backups = getDailyBackups();
-  const target = backups.find((b) => b.id === backupId);
+  let target = backups.find((b) => b.id === backupId);
+  
+  if (!target || !target.plants || target.plants.length === 0) {
+    if (inMemoryBackupsCache) {
+      target = inMemoryBackupsCache.find((b) => b.id === backupId);
+    }
+  }
+
   if (!target || !target.plants || target.plants.length === 0) {
     return null;
   }
+  
   savePlants(target.plants);
   batchSavePlantsToFirestore(target.plants);
   return target.plants;
