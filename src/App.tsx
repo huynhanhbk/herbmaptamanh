@@ -128,14 +128,14 @@ export function App() {
     newPlantData: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
     explicitSpeciesId?: string
   ) => {
-    const updated = saveNewPlant(newPlantData);
+    const updated = saveNewPlant(newPlantData, explicitSpeciesId);
     setPlants(updated);
     setSurveyPrefillData(null);
     setPickedCoords(null);
     setIsPickingCoords(false);
     showToast(
       explicitSpeciesId 
-        ? `Đã bổ sung điểm khảo sát mới giữ nguyên mã định danh [${explicitSpeciesId}]!` 
+        ? `Đã ghi nhận điểm khảo sát thực địa mới cho loài [${newPlantData.vietnameseName}] trên Bản đồ số!` 
         : 'Đã lưu phiếu khảo sát thực địa thành công vào cơ sở dữ liệu số!'
     );
   };

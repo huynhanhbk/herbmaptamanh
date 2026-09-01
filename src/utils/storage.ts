@@ -8,6 +8,7 @@ import {
   CommuneVillage,
   COMMUNE_VILLAGES,
   PlantMonitoringLog,
+  LocationData,
   getHabitatLabel,
   getConservationStatusLabel
 } from '../types';
@@ -200,96 +201,209 @@ export function savePlants(plants: MedicinalPlant[]): void {
   }
 }
 
+export function isDifferentLocation(loc1?: LocationData, loc2?: LocationData): boolean {
+  if (!loc1 || !loc2) return true;
+  const lat1 = Number(loc1.lat);
+  const lng1 = Number(loc1.lng);
+  const lat2 = Number(loc2.lat);
+  const lng2 = Number(loc2.lng);
+  if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) return true;
+  
+  const latDiff = Math.abs(lat1 - lat2);
+  const lngDiff = Math.abs(lng1 - lng2);
+  
+  // Approx 15-20 meters threshold
+  if (latDiff > 0.00015 || lngDiff > 0.00015) {
+    return true;
+  }
+  
+  // Also check if commune village differs
+  if (loc1.communeSection && loc2.communeSection && loc1.communeSection !== loc2.communeSection) {
+    return true;
+  }
+  
+  return false;
+}
+
+export function getNextSpeciesId(currentPlants: MedicinalPlant[]): string {
+  let maxNum = 0;
+  currentPlants.forEach((p) => {
+    const match = (p.id || '').match(/TA-HERB-(\d+)/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  return `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
+}
+
+export function getNextLocationIdForSpecies(baseSpeciesId: string, currentPlants: MedicinalPlant[]): string {
+  const rootId = baseSpeciesId.replace(/-(LOC|P|loc|p)\d+$/i, '').trim();
+  let maxLocNum = 1;
+  const regex = new RegExp(`^${rootId}-(LOC|P|loc|p)(\\d+)$`, 'i');
+  
+  currentPlants.forEach((p) => {
+    if (p.id === rootId) {
+      if (maxLocNum < 1) maxLocNum = 1;
+    }
+    const match = (p.id || '').match(regex);
+    if (match) {
+      const num = parseInt(match[2], 10);
+      if (!isNaN(num) && num > maxLocNum) {
+        maxLocNum = num;
+      }
+    }
+  });
+
+  return `${rootId}-LOC${maxLocNum + 1}`;
+}
+
 export function addPlant(
   plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
   explicitSpeciesId?: string
 ): MedicinalPlant {
   const currentPlants = getStoredPlants();
-  
-  // 1. Check if an explicit species ID was selected (e.g. 'TA-HERB-001')
-  let assignedId = explicitSpeciesId?.trim() || plant.id?.trim();
-
-  // 2. If not explicitly provided, look up if a plant with the same Vietnamese name or scientific name exists
-  if (!assignedId) {
-    const inputName = plant.vietnameseName.trim().toLowerCase();
-    const inputSciName = plant.scientificName?.trim().toLowerCase();
-
-    const matchedPlant = currentPlants.find((p) => {
-      const existingName = p.vietnameseName.trim().toLowerCase();
-      const existingSciName = p.scientificName.trim().toLowerCase();
-      return (
-        existingName === inputName ||
-        (inputSciName && inputSciName !== 'đang xác minh phân loại học' && existingSciName === inputSciName)
-      );
-    });
-
-    if (matchedPlant) {
-      assignedId = matchedPlant.id;
-    }
-  }
-
-  const existingIndex = assignedId ? currentPlants.findIndex((p) => p.id === assignedId) : -1;
-
-  // 3. If it is a completely new species, generate the next sequential identifier (TA-HERB-XXX)
-  if (!assignedId || existingIndex === -1) {
-    if (!assignedId) {
-      let maxNum = 0;
-      currentPlants.forEach((p) => {
-        const match = p.id.match(/TA-HERB-(\d+)/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (num > maxNum) maxNum = num;
-        }
-      });
-      assignedId = `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
-    }
-
-    const now = new Date().toISOString();
-    const newPlant: MedicinalPlant = {
-      ...plant,
-      id: assignedId,
-      surveyFrequencyCount: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    const updated = deduplicatePlants([newPlant, ...currentPlants]);
-    savePlants(updated);
-    savePlantToFirestore(newPlant);
-    return newPlant;
-  }
-
-  // 4. If assignedId already exists in currentPlants, update/enrich the existing record rather than duplicating it!
-  const existingPlant = currentPlants[existingIndex];
   const now = new Date().toISOString();
 
-  // Merge photos
-  const mergedPhotos = [...(existingPlant.photos || [])];
-  (plant.photos || []).forEach((p) => {
-    if (!mergedPhotos.some((mp) => mp.url === p.url)) {
-      mergedPhotos.push(p);
-    }
-  });
+  // 1. Identify if this survey belongs to an existing species
+  let matchedBaseSpecies: MedicinalPlant | undefined;
+  const targetId = (explicitSpeciesId || plant.id || '').trim();
 
-  const updatedExistingPlant: MedicinalPlant = {
-    ...existingPlant,
+  if (targetId) {
+    const rootId = targetId.replace(/-(LOC|P|loc|p)\d+$/i, '').trim();
+    matchedBaseSpecies = currentPlants.find((p) => p.id === targetId || p.id === rootId);
+  }
+
+  if (!matchedBaseSpecies && plant.vietnameseName) {
+    const inputName = plant.vietnameseName.trim().toLowerCase();
+    const inputSci = (plant.scientificName || '').trim().toLowerCase();
+    matchedBaseSpecies = currentPlants.find((p) => {
+      const pName = (p.vietnameseName || '').trim().toLowerCase();
+      const pSci = (p.scientificName || '').trim().toLowerCase();
+      return pName === inputName || (inputSci && inputSci !== 'đang xác minh phân loại học' && pSci === inputSci);
+    });
+  }
+
+  // 2. CASE: Survey for an EXISTING species in the database
+  if (matchedBaseSpecies) {
+    const isNewLocation = isDifferentLocation(matchedBaseSpecies.location, plant.location);
+
+    if (isNewLocation) {
+      // Create a NEW survey location point on the map!
+      const newPointId = getNextLocationIdForSpecies(matchedBaseSpecies.id, currentPlants);
+      
+      const newSurveyPoint: MedicinalPlant = {
+        ...matchedBaseSpecies,
+        ...plant,
+        id: newPointId,
+        vietnameseName: matchedBaseSpecies.vietnameseName || plant.vietnameseName,
+        scientificName: matchedBaseSpecies.scientificName || plant.scientificName,
+        family: matchedBaseSpecies.family || plant.family,
+        location: plant.location || matchedBaseSpecies.location,
+        habitat: plant.habitat || matchedBaseSpecies.habitat,
+        habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
+        coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
+        photos: plant.photos && plant.photos.length > 0 ? plant.photos : matchedBaseSpecies.photos,
+        dataSource: plant.dataSource || {
+          type: 'field_survey_2026',
+          title: `Khảo sát điểm mới ${matchedBaseSpecies.vietnameseName}`,
+          surveyor: 'Đoàn khảo sát thực địa Tam Anh',
+          surveyDate: now.split('T')[0],
+        },
+        status: plant.status || 'verified',
+        surveyFrequencyCount: 1,
+        occurrenceStatus: 'present',
+        isDisappeared: false,
+        monitoringLogs: [
+          {
+            id: `log-init-${newPointId}`,
+            date: plant.dataSource?.surveyDate || now.split('T')[0],
+            status: 'present',
+            statusNote: `Ghi nhận điểm khảo sát thực địa mới tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
+            surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
+            createdAt: now,
+          },
+        ],
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const updatedList = deduplicatePlants([newSurveyPoint, ...currentPlants]);
+      savePlants(updatedList);
+      savePlantToFirestore(newSurveyPoint);
+      return newSurveyPoint;
+    } else {
+      // Same exact location -> update/enrich existing record
+      const existingIndex = currentPlants.findIndex((p) => p.id === matchedBaseSpecies!.id);
+      const mergedPhotos = [...(matchedBaseSpecies.photos || [])];
+      (plant.photos || []).forEach((p) => {
+        if (!mergedPhotos.some((mp) => mp.url === p.url)) {
+          mergedPhotos.push(p);
+        }
+      });
+
+      const newLog: PlantMonitoringLog = {
+        id: `log-${Date.now()}`,
+        date: plant.dataSource?.surveyDate || now.split('T')[0],
+        status: 'present',
+        statusNote: `Khảo sát định kỳ ghi nhận cây vẫn phát triển tốt tại ${plant.location?.addressDescription || 'vị trí ban đầu'}.`,
+        surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
+        createdAt: now,
+      };
+
+      const existingLogs = Array.isArray(matchedBaseSpecies.monitoringLogs) ? matchedBaseSpecies.monitoringLogs : [];
+
+      const updatedExistingPlant: MedicinalPlant = {
+        ...matchedBaseSpecies,
+        ...plant,
+        id: matchedBaseSpecies.id,
+        photos: mergedPhotos,
+        coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
+        location: plant.location || matchedBaseSpecies.location,
+        habitat: plant.habitat || matchedBaseSpecies.habitat,
+        habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
+        status: plant.status || matchedBaseSpecies.status,
+        surveyFrequencyCount: (matchedBaseSpecies.surveyFrequencyCount || 1) + 1,
+        monitoringLogs: [newLog, ...existingLogs],
+        updatedAt: now,
+      };
+
+      currentPlants[existingIndex] = updatedExistingPlant;
+      const updatedList = deduplicatePlants(currentPlants);
+      savePlants(updatedList);
+      savePlantToFirestore(updatedExistingPlant);
+      return updatedExistingPlant;
+    }
+  }
+
+  // 3. CASE: Brand NEW species
+  const newSpeciesId = getNextSpeciesId(currentPlants);
+  const newPlant: MedicinalPlant = {
     ...plant,
-    id: assignedId,
-    photos: mergedPhotos,
-    coverImage: plant.coverImage || existingPlant.coverImage,
-    location: plant.location || existingPlant.location,
-    habitat: plant.habitat || existingPlant.habitat,
-    habitatCategory: plant.habitatCategory || existingPlant.habitatCategory,
-    status: plant.status || existingPlant.status,
-    surveyFrequencyCount: (existingPlant.surveyFrequencyCount || 1) + 1,
+    id: newSpeciesId,
+    surveyFrequencyCount: 1,
+    occurrenceStatus: 'present',
+    isDisappeared: false,
+    monitoringLogs: [
+      {
+        id: `log-init-${newSpeciesId}`,
+        date: plant.dataSource?.surveyDate || now.split('T')[0],
+        status: 'present',
+        statusNote: `Khảo sát phát hiện mới loài cây thuốc tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
+        surveyor: plant.dataSource?.surveyor || 'Nhóm nghiên cứu KHKT Tam Anh',
+        createdAt: now,
+      },
+    ],
+    createdAt: now,
     updatedAt: now,
   };
 
-  currentPlants[existingIndex] = updatedExistingPlant;
-  const updated = deduplicatePlants(currentPlants);
-  savePlants(updated);
-  savePlantToFirestore(updatedExistingPlant);
-  return updatedExistingPlant;
+  const updatedList = deduplicatePlants([newPlant, ...currentPlants]);
+  savePlants(updatedList);
+  savePlantToFirestore(newPlant);
+  return newPlant;
 }
 
 export function saveNewPlant(
@@ -630,8 +744,17 @@ export function importPlantsFromJSON(jsonText: string, mode: 'merge' | 'replace'
       };
     }
 
-    const normalizedNewPlants = rawList.map((item, idx) => normalizeImportedPlant(item, idx));
     const current = getStoredPlants();
+    let maxExistingNum = 0;
+    current.forEach((p) => {
+      const match = (p.id || '').match(/TA-HERB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxExistingNum) maxExistingNum = num;
+      }
+    });
+
+    const normalizedNewPlants = rawList.map((item, idx) => normalizeImportedPlant(item, maxExistingNum + idx));
     
     let resultList: MedicinalPlant[];
     if (mode === 'replace') {
@@ -767,6 +890,16 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
     const dateIdx = getColIndex(['ngày', 'date']);
     const imgIdx = getColIndex(['ảnh', 'image', 'photo', 'url']);
 
+    const current = getStoredPlants();
+    let maxExistingNum = 0;
+    current.forEach((p) => {
+      const match = (p.id || '').match(/TA-HERB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxExistingNum) maxExistingNum = num;
+      }
+    });
+
     const newPlants: MedicinalPlant[] = [];
 
     dataRows.forEach((row, rowIndex) => {
@@ -774,7 +907,7 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
       if (!vName || vName.trim() === '') return;
 
       const rawObj: any = {
-        id: idIdx >= 0 && row[idIdx] ? row[idIdx] : `TA-HERB-${String(rowIndex + 1).padStart(3, '0')}`,
+        id: idIdx >= 0 && row[idIdx] ? row[idIdx] : `TA-HERB-${String(maxExistingNum + rowIndex + 1).padStart(3, '0')}`,
         vietnameseName: vName,
         scientificName: sciIdx >= 0 && row[sciIdx] ? row[sciIdx] : 'Đang xác minh phân loại học',
         family: famIdx >= 0 && row[famIdx] ? row[famIdx] : 'Chưa phân loại',
@@ -792,7 +925,7 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
         coverImage: imgIdx >= 0 && row[imgIdx] ? row[imgIdx] : undefined,
       };
 
-      newPlants.push(normalizeImportedPlant(rawObj, rowIndex));
+      newPlants.push(normalizeImportedPlant(rawObj, maxExistingNum + rowIndex));
     });
 
     if (newPlants.length === 0) {
@@ -807,13 +940,13 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
       };
     }
 
-    const current = getStoredPlants();
+    const freshCurrent = getStoredPlants();
     let resultList: MedicinalPlant[];
     if (mode === 'replace') {
       resultList = newPlants;
     } else {
       const map = new Map<string, MedicinalPlant>();
-      current.forEach((p) => map.set(p.id, p));
+      freshCurrent.forEach((p) => map.set(p.id, p));
       newPlants.forEach((p) => map.set(p.id, p));
       resultList = Array.from(map.values());
     }

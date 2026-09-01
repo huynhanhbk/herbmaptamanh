@@ -122,16 +122,17 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   // Ref to track if modal reopened due to map coordinate picking
   const isReturningFromMapPickRef = useRef(false);
 
-  // Compute unique species list from stored plants
+  // Compute unique species list from stored plants (grouping multiple survey points of the same species)
   const uniqueSpeciesList = useMemo(() => {
     const list = existingPlants && existingPlants.length > 0 ? existingPlants : getStoredPlants();
     const map = new Map<string, MedicinalPlant>();
     list.forEach((p) => {
-      if (!map.has(p.id)) {
-        map.set(p.id, p);
+      const key = (p.vietnameseName || p.id).trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, p);
       }
     });
-    return Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
+    return Array.from(map.values()).sort((a, b) => a.vietnameseName.localeCompare(b.vietnameseName, 'vi'));
   }, [existingPlants, isOpen]);
 
   // Selected existing plant object
