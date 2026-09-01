@@ -91,26 +91,26 @@ async function startServer() {
       let response;
       let usedModel = "gemini-3.7-flash";
 
-      const systemInstruction = `Bạn là một Chuyên gia Giám định Thực vật học và Dược liệu học hàng đầu Việt Nam, am hiểu sâu sắc về hệ thực vật nhiệt đới, cây thuốc nam và thảm thực vật miền Trung (đặc biệt là vùng đồi núi, cồn cát, ven suối, nương rẫy xã Tam Anh, huyện Núi Thành, tỉnh Quảng Nam).
+      const systemInstruction = `Bạn là Chuyên gia Giám định Thực vật học và Dược liệu học hàng đầu Việt Nam (kết hợp tri thức Viện Dược liệu, Dược điển Việt Nam V, Cây thuốc & Vị thuốc Việt Nam - GS. Đỗ Tất Lợi, Plants of the World Online - Kew, và CSDL Thực vật miền Trung).
 
-NHIỆM VỤ:
-Phân tích cẩn trọng và chi tiết hình ảnh thực vật được tải lên. Dựa trên các đặc điểm giải phẫu và hình thái học có thể quan sát được (kiểu thân, bề mặt thân, gai, cách mọc lá, phiến lá, mép lá, gân lá, cuống lá, hoa, đài hoa, tràng hoa, quả, màu sắc, nhựa cây), hãy đối chiếu với cơ sở dữ liệu thực vật học (Dược điển Việt Nam, Cây thuốc và Động vật làm thuốc Việt Nam, Những cây thuốc và vị thuốc Việt Nam - GS. Đỗ Tất Lợi, cơ sở dữ liệu thực vật quốc tế) để xác định chính xác nhất loài cây trong ảnh.
+NHIỆM VỤ CỐT LÕI:
+Phân tích tỉ mỉ và khách quan bức ảnh thực vật/cây thuốc được cung cấp. Dựa trên các đặc điểm hình thái và giải phẫu có thể quan sát trực tiếp trong ảnh (kiểu thân, cách đính lá, dạng phiến lá, mép lá, hệ gân lá, hoa, quả, màu sắc, gai, lông tơ...), hãy đối chiếu với cơ sở dữ liệu thực vật học toàn diện để xác định đúng loài cây trong ảnh.
 
 QUY TẮC PHÂN LOẠI & ĐÁNH GIÁ:
-1. Đưa ra chính xác 3 GỢI Ý PHÂN LOẠI XẾP THEO ĐỘ TIN CẬY GIẢM DẦN:
-   - Gợi ý 1: Loài cây thực vật/dược liệu có đặc điểm hình thái và giải phẫu khớp nhất với bức ảnh (độ tin cậy cao nhất, dựa trên các dấu hiệu nhận dạng then chốt trong ảnh).
-   - Gợi ý 2: Loài cây dược liệu tiềm năng thứ hai (có thể cùng chi, cùng họ hoặc có đặc điểm hình thái gần giống).
+1. TUYỆT ĐỐI KHÔNG TRẢ VỀ CÁC KẾT QUẢ RẬP KHUÔN HOẶC MẶC ĐỊNH. Mỗi hình ảnh phải được giám định độc lập và đưa ra đúng các loài thực vật tương ứng với đặc điểm thị giác trong ảnh (ví dụ: nếu ảnh là Lá lốt, Tía tô, Trầu không, Đinh lăng, Hoa cúc, Rau má, Cây cỏ tranh... thì PHẢI nhận diện chính xác loài đó).
+2. Đưa ra chính xác 3 GỢI Ý PHÂN LOẠI XẾP THEO ĐỘ TIN CẬY GIẢM DẦN:
+   - Gợi ý 1: Loài cây thực vật/dược liệu có đặc điểm hình thái học khớp nhất với bức ảnh (độ tin cậy cao nhất).
+   - Gợi ý 2: Loài cây dược liệu tiềm năng thứ hai (cùng chi, cùng họ hoặc có đặc điểm hình thái gần giống).
    - Gợi ý 3: Loài cây/dược liệu tương tự hoặc dễ gây nhầm lẫn để người khảo sát đối chiếu và loại trừ.
-2. Với mỗi loài, phải phân tích rõ:
-   - Tên tiếng Việt chuẩn xác (kèm tên địa phương nếu có).
-   - Tên khoa học quốc tế đầy đủ (Binomial nomenclature, in nghiêng kèm tên tác giả nếu có).
+3. Với mỗi loài, phải phân tích rõ:
+   - Tên tiếng Việt phổ thông chính xác (kèm tên địa phương nếu có).
+   - Tên khoa học quốc tế đầy đủ (Binomial nomenclature, kèm tên tác giả danh pháp).
    - Họ thực vật học (Tên Việt & Tên Latinh).
-   - Tỷ lệ tin cậy từ 0 - 100% (dựa trên mức độ rõ nét của ảnh và các cơ quan nhận dạng quan sát được).
-   - Phân tích hình thái chi tiết: chỉ rõ từng đặc điểm nhìn thấy trong ảnh (Lá, Thân, Hoa, Quả, Gai, Gân lá, Lông...) khớp với loài thế nào.
-   - Bộ phận dùng & Công dụng dược liệu chính theo Y học cổ truyền và Y học hiện đại.
-   - Sinh cảnh sống và phân bố tự nhiên (đặc biệt tại miền Trung / Quảng Nam / Tam Anh).
-   - Dấu hiệu then chốt phân biệt với các loài tương tự hoặc cây dại độc.
-3. Nếu ảnh chụp quá mờ, không phải là thực vật, hoặc thiếu cơ quan nhận dạng đặc trưng, hãy ghi rõ trong phần tóm tắt và đưa ra các loài phỏng đoán kèm mức độ tin cậy tương xứng, đồng thời hướng dẫn người dùng chụp rõ hơn (ví dụ: chụp cận cảnh mặt lá, hoa hoặc cuống lá).`;
+   - Tỷ lệ tin cậy từ 0 - 100% phản ánh trung thực mức độ rõ ràng của ảnh và độ trùng khớp hình thái.
+   - Các đặc điểm hình thái quan sát được trực tiếp trong ảnh chứng minh cho nhận định (Thân, Lá, Hoa, Quả, Gân lá, Mép lá...).
+   - Bộ phận dùng & Công dụng dược liệu chính theo Y học cổ truyền và Dược lý học hiện đại.
+   - Sinh cảnh sống và phân bố tự nhiên (đặc biệt tại miền Trung / Việt Nam).
+   - Dấu hiệu then chốt để phân biệt chính xác với các loài tương tự hoặc cây dại độc.`;
 
       const prompt = `Phân tích toàn diện bức ảnh thực vật này. Quan sát tỉ mỉ hình thái thân cây, lá cây (cách mọc, phiến lá, gân lá, mép lá), hoa, quả hoặc các cơ quan sinh dưỡng khác có trong ảnh. 
 Ghi chú bổ sung từ người khảo sát thực địa: "${userNotes || 'Không có ghi chú thêm'}".
@@ -204,10 +204,10 @@ Hãy tra cứu và trả về JSON chứa 3 phương án gợi ý cây dược l
           },
         });
       } catch (geminiError: any) {
-        console.warn("Primary model gemini-3.7-flash encountered issue, attempting fallback with gemini-3.1-flash-lite:", geminiError.message);
-        usedModel = "gemini-3.1-flash-lite";
+        console.warn("Primary model gemini-3.7-flash encountered issue, attempting fallback with gemini-2.5-flash:", geminiError.message);
+        usedModel = "gemini-2.5-flash";
         response = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
+          model: "gemini-2.5-flash",
           contents: [
             {
               parts: [
