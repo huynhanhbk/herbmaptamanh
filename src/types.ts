@@ -76,7 +76,7 @@ export function getHabitatLabel(cat: HabitatCategory | string): string {
 
 export type ConservationLevel = 'safe' | 'vulnerable' | 'endangered';
 
-export type UnifiedConservationStatus = 'An toàn' | 'Sắp nguy cấp' | 'Nguy cấp / Cần bảo tồn';
+export type UnifiedConservationStatus = 'An toàn' | 'Sắp nguy cấp' | 'Nguy cấp / Cần bảo tồn' | 'Đã biến mất';
 
 export type PlantOccurrenceStatus = 
   | 'present'       // Còn tồn tại / Đang phát triển tốt
@@ -112,7 +112,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   safe: {
     key: 'safe',
     label: 'An toàn',
-    subLabel: 'Sinh trưởng tốt, ổn định',
+    subLabel: 'Còn tồn tại & phát triển',
     colorHex: '#059669',
     bgClass: 'bg-emerald-600',
     textClass: 'text-emerald-700',
@@ -126,7 +126,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   vulnerable: {
     key: 'vulnerable',
     label: 'Sắp nguy cấp',
-    subLabel: 'Suy thoái / Suy giảm cá thể',
+    subLabel: 'Bị suy thoái / Suy giảm cá thể',
     colorHex: '#d97706',
     bgClass: 'bg-amber-500',
     textClass: 'text-amber-700',
@@ -153,8 +153,8 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   },
   disappeared: {
     key: 'disappeared',
-    label: 'Điểm đã mất',
-    subLabel: 'Cây không còn / Chờ phục hồi',
+    label: 'Đã biến mất',
+    subLabel: 'Đã mất tại điểm thực địa',
     colorHex: '#475569',
     bgClass: 'bg-stone-600',
     textClass: 'text-stone-700',
@@ -167,7 +167,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   },
   new: {
     key: 'new',
-    label: 'Điểm mới',
+    label: 'Mới ghi nhận',
     subLabel: 'Mới khảo sát / Chờ duyệt',
     colorHex: '#7c3aed',
     bgClass: 'bg-purple-600',
@@ -183,10 +183,10 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
 
 /**
  * Resolves any plant into exactly one of the 5 unified survey statuses:
- * 1. 'disappeared' if isDisappeared or occurrenceStatus is 'disappeared'
+ * 1. 'disappeared' if isDisappeared or occurrenceStatus is 'disappeared' or conservationStatus is 'Đã biến mất'
  * 2. 'new' if status is 'pending'
- * 3. 'endangered' if conservationLevel is 'endangered'
- * 4. 'vulnerable' if conservationLevel is 'vulnerable' OR occurrenceStatus is 'degraded' (Suy thoái)
+ * 3. 'endangered' if conservationLevel is 'endangered' or conservationStatus is 'Nguy cấp / Cần bảo tồn'
+ * 4. 'vulnerable' if conservationLevel is 'vulnerable' OR conservationStatus is 'Sắp nguy cấp' OR occurrenceStatus is 'degraded' (Suy thoái)
  * 5. 'safe' otherwise
  */
 export function getPlantSurveyStatus(plant: {
@@ -196,7 +196,12 @@ export function getPlantSurveyStatus(plant: {
   occurrenceStatus?: string;
   isDisappeared?: boolean;
 }): SurveyPointStatusMeta {
-  if (plant.isDisappeared || plant.occurrenceStatus === 'disappeared') {
+  if (
+    plant.isDisappeared || 
+    plant.occurrenceStatus === 'disappeared' || 
+    plant.conservationStatus === 'Đã biến mất' ||
+    plant.conservationLevel === ('disappeared' as any)
+  ) {
     return SURVEY_POINT_STATUS_CONFIG.disappeared;
   }
   if (plant.status === 'pending') {
@@ -222,6 +227,7 @@ export interface PlantMonitoringLog {
   id: string;
   date: string; // YYYY-MM-DD
   status: PlantOccurrenceStatus;
+  conservationStatus?: UnifiedConservationStatus; // Trạng thái bảo tồn thực tế tại đợt giám sát
   statusNote: string; // Ghi chú chi tiết (nguyên nhân thay đổi, tác động môi trường, thu hoạch...)
   surveyor: string; // Người / Đoàn giám sát
   contactPhone?: string; // Số điện thoại liên hệ xác minh của người gửi
@@ -234,13 +240,21 @@ export interface PlantMonitoringLog {
   rejectionReason?: string; // Lý do nếu từ chối
 }
 
-export function getConservationStatusLabel(statusOrLevel?: string): UnifiedConservationStatus {
+export function getConservationStatusLabel(
+  statusOrLevel?: string,
+  isDisappeared?: boolean,
+  occurrenceStatus?: string
+): UnifiedConservationStatus {
+  if (isDisappeared || occurrenceStatus === 'disappeared') return 'Đã biến mất';
   if (!statusOrLevel) return 'An toàn';
   const str = String(statusOrLevel).trim().toLowerCase();
+  if (str.includes('biến mất') || str.includes('disappeared') || str.includes('đã mất')) {
+    return 'Đã biến mất';
+  }
   if (str.includes('nguy cấp') || str.includes('cần bảo tồn') || str.includes('đỏ') || str.includes('endangered')) {
     return 'Nguy cấp / Cần bảo tồn';
   }
-  if (str.includes('sắp nguy cấp') || str.includes('vulnerable') || str.includes('hiếm')) {
+  if (str.includes('sắp nguy cấp') || str.includes('vulnerable') || str.includes('suy thoái') || str.includes('degraded') || str.includes('hiếm')) {
     return 'Sắp nguy cấp';
   }
   return 'An toàn';

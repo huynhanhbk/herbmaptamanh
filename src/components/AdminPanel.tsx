@@ -68,6 +68,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [adminSearch, setAdminSearch] = useState('');
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [editingPlant, setEditingPlant] = useState<MedicinalPlant | null>(null);
+  const [deleteConfirmPlant, setDeleteConfirmPlant] = useState<{ id: string; name: string } | null>(null);
+  const [rejectLogState, setRejectLogState] = useState<{ plantId: string; logId: string; plantName: string; reason: string } | null>(null);
+  const [deleteLogState, setDeleteLogState] = useState<{ plantId: string; logId: string } | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
   
   // Modals for Import & Backup Manager
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
@@ -112,19 +116,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditingPlant(plant);
   };
 
-  const handleSavePlantUpdates = (updatedPlant: MedicinalPlant) => {
-    const updated = saveUpdatedPlant(updatedPlant);
+  const handleSavePlantUpdates = (
+    idOrPlant: string | MedicinalPlant,
+    updatedFields?: Partial<MedicinalPlant>
+  ) => {
+    let updated: MedicinalPlant[];
+    if (typeof idOrPlant === 'string') {
+      updated = saveUpdatedPlant(idOrPlant, updatedFields || {});
+    } else {
+      updated = saveUpdatedPlant(idOrPlant.id, idOrPlant);
+    }
     onPlantsUpdated(updated);
-    showNotice(`Đã lưu cập nhật thông tin loài "${updatedPlant.vietnameseName}" thành công!`);
+    const targetId = typeof idOrPlant === 'string' ? idOrPlant : idOrPlant.id;
+    const target = updated.find((p) => p.id === targetId);
+    showNotice(`Đã lưu cập nhật thông tin loài "${target?.vietnameseName || ''}" thành công!`);
     setEditingPlant(null);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (confirm(`Bạn có chắc chắn muốn xóa cây thuốc "${name}" khỏi cơ sở dữ liệu?`)) {
-      const updated = deletePlant(id);
-      onPlantsUpdated(updated);
-      showNotice(`Đã xóa cây thuốc "${name}" thành công.`);
-    }
+    setDeleteConfirmPlant({ id, name });
+  };
+
+  const confirmDeletePlant = () => {
+    if (!deleteConfirmPlant) return;
+    const { id, name } = deleteConfirmPlant;
+    const updated = deletePlant(id);
+    onPlantsUpdated(updated);
+    showNotice(`Đã xóa vĩnh viễn cây thuốc "${name}" khỏi cơ sở dữ liệu.`);
+    setDeleteConfirmPlant(null);
   };
 
   const handleApproveLog = (plantId: string, logId: string, plantName: string) => {
@@ -134,28 +153,45 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleRejectLog = (plantId: string, logId: string, plantName: string) => {
-    const reason = prompt('Nhập lý do từ chối (tùy chọn):', 'Ảnh không rõ ràng hoặc thông tin chưa chính xác');
-    if (reason !== null) {
-      const updated = rejectPlantMonitoringLog(plantId, logId, reason);
-      onPlantsUpdated(updated);
-      showNotice(`Đã từ chối đợt báo cáo cho loài "${plantName}".`);
-    }
+    setRejectLogState({ 
+      plantId, 
+      logId, 
+      plantName, 
+      reason: 'Ảnh không rõ ràng hoặc thông tin chưa chính xác ngoài thực địa' 
+    });
+  };
+
+  const confirmRejectLog = () => {
+    if (!rejectLogState) return;
+    const { plantId, logId, plantName, reason } = rejectLogState;
+    const updated = rejectPlantMonitoringLog(plantId, logId, reason);
+    onPlantsUpdated(updated);
+    showNotice(`Đã từ chối đợt báo cáo cho loài "${plantName}".`);
+    setRejectLogState(null);
   };
 
   const handleDeleteLog = (plantId: string, logId: string) => {
-    if (confirm('Bạn có chắc muốn xóa bản ghi giám sát thực địa này?')) {
-      const updated = deletePlantMonitoringLog(plantId, logId);
-      onPlantsUpdated(updated);
-      showNotice('Đã xóa bản ghi đợt kiểm tra.');
-    }
+    setDeleteLogState({ plantId, logId });
+  };
+
+  const confirmDeleteLog = () => {
+    if (!deleteLogState) return;
+    const { plantId, logId } = deleteLogState;
+    const updated = deletePlantMonitoringLog(plantId, logId);
+    onPlantsUpdated(updated);
+    showNotice('Đã xóa bản ghi đợt kiểm tra.');
+    setDeleteLogState(null);
   };
 
   const handleResetData = () => {
-    if (confirm('CẢNH BÁO: Thao tác này sẽ khôi phục toàn bộ CSDL về 14 loài cây thuốc chuẩn ban đầu. Bạn có chắc chắn không?')) {
-      const defaultData = resetToDefaultData();
-      onPlantsUpdated(defaultData);
-      showNotice('Đã khôi phục cơ sở dữ liệu về dữ liệu mẫu chuẩn ban đầu!');
-    }
+    setIsResetConfirmOpen(true);
+  };
+
+  const confirmResetData = () => {
+    const defaultData = resetToDefaultData();
+    onPlantsUpdated(defaultData);
+    showNotice('Đã khôi phục cơ sở dữ liệu về 14 loài cây thuốc chuẩn ban đầu!');
+    setIsResetConfirmOpen(false);
   };
 
   const handleDownloadJSON = () => {
@@ -802,6 +838,153 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }}
         onRestoreSuccess={handleRestoreSuccess}
       />
+
+      {/* In-App Delete Plant Confirmation Modal */}
+      {deleteConfirmPlant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-rose-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-stone-900">Xác nhận xóa cây thuốc?</h3>
+              <p className="text-xs text-stone-600">
+                Bạn có chắc chắn muốn xóa vĩnh viễn cây thuốc <span className="font-bold text-rose-700">"{deleteConfirmPlant.name}"</span> (Mã: <span className="font-mono font-semibold">{deleteConfirmPlant.id}</span>) khỏi cơ sở dữ liệu?
+              </p>
+              <p className="text-[11px] text-stone-400">Thao tác này sẽ xóa đồng bộ trên toàn hệ thống và lưu trữ.</p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmPlant(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeletePlant}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xác nhận xóa vĩnh viễn</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Reject Log Modal */}
+      {rejectLogState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-amber-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto">
+              <X className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-stone-900">Từ chối đợt báo cáo thực địa?</h3>
+              <p className="text-xs text-stone-600">
+                Loài: <span className="font-bold text-stone-800">{rejectLogState.plantName}</span>
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-stone-700">Lý do từ chối (được lưu vào lịch sử):</label>
+              <input
+                type="text"
+                value={rejectLogState.reason}
+                onChange={(e) => setRejectLogState({ ...rejectLogState, reason: e.target.value })}
+                placeholder="Nhập lý do từ chối..."
+                className="w-full text-xs p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setRejectLogState(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+              >
+                Quay lại
+              </button>
+              <button
+                type="button"
+                onClick={confirmRejectLog}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-sm"
+              >
+                Xác nhận từ chối
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Delete Log Modal */}
+      {deleteLogState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-stone-200 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-stone-100 text-stone-600 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-stone-900">Xóa bản ghi kiểm tra này?</h3>
+              <p className="text-xs text-stone-600">
+                Bản ghi nhật ký giám sát sẽ bị xóa khỏi lịch sử của loài cây thuốc.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setDeleteLogState(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteLog}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-sm"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* In-App Reset Database Confirmation Modal */}
+      {isResetConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-rose-300 space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+              <RotateCcw className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-bold text-stone-900">Khôi phục cơ sở dữ liệu gốc?</h3>
+              <p className="text-xs text-stone-600">
+                Thao tác này sẽ thiết lập lại toàn bộ danh mục cây thuốc về <span className="font-bold text-emerald-800">14 loài cây thuốc chuẩn ban đầu</span> của xã Tam Anh.
+              </p>
+              <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-xl border border-amber-200">
+                ⚠️ Khuyến nghị: Hãy xuất file JSON sao lưu trước khi thực hiện thao tác này nếu bạn muốn giữ lại dữ liệu hiện tại!
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setIsResetConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-semibold transition-colors"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={confirmResetData}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors shadow-sm"
+              >
+                Khôi phục về CSDL gốc
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

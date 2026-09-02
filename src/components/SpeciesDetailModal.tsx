@@ -397,7 +397,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
               )}
 
               {/* Quick Metadata Box */}
-              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2 text-xs">
+              <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200/80 space-y-2.5 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-stone-500">Họ thực vật:</span>
                   <span className="font-semibold text-stone-900">{plant.family}</span>
@@ -411,13 +411,29 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-stone-500">Tình trạng bảo tồn:</span>
                   <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
-                    plant.conservationLevel === 'endangered' 
-                      ? 'bg-rose-100 text-rose-800' 
-                      : plant.conservationLevel === 'vulnerable' || plant.conservationLevel === 'rare'
-                      ? 'bg-amber-100 text-amber-800' 
-                      : 'bg-emerald-100 text-emerald-800'
+                    plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
+                      ? 'bg-rose-100 text-rose-800 border border-rose-200' 
+                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.conservationLevel === 'rare'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                   }`}>
                     {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500">Hiện trạng thực địa:</span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                    isDisappeared
+                      ? 'bg-stone-200 text-stone-800 border border-stone-300'
+                      : plant.occurrenceStatus === 'degraded'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {isDisappeared
+                      ? '⚫ Đã biến mất'
+                      : plant.occurrenceStatus === 'degraded'
+                      ? '🟡 Bị suy thoái'
+                      : '🟢 Còn tồn tại & Phát triển'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">

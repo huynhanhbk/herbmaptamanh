@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   Save, 
@@ -18,9 +18,12 @@ import {
   HabitatCategory, 
   ConservationLevel, 
   UnifiedConservationStatus,
+  PlantOccurrenceStatus,
   HABITAT_OPTIONS,
   COMMUNE_VILLAGES,
-  CommuneVillage
+  CommuneVillage,
+  getConservationStatusLabel,
+  getPlantSurveyStatus
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -70,24 +73,53 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   const [informantName, setInformantName] = useState(plant.traditionalUses?.informantName || 'Lương y & Nhân dân xã Tam Anh');
   const [informantRole, setInformantRole] = useState(plant.traditionalUses?.informantRole || 'Người dân bản địa');
 
-  // Status & Conservation
-  const [conservationStatus, setConservationStatus] = useState<UnifiedConservationStatus>(
-    (plant.conservationStatus as UnifiedConservationStatus) || 'An toàn'
+  // Status & Conservation (Unified 4 Options)
+  const initialUnifiedStatus: UnifiedConservationStatus = getConservationStatusLabel(
+    plant.conservationStatus,
+    plant.isDisappeared,
+    plant.occurrenceStatus
   );
-  const [conservationLevel, setConservationLevel] = useState<ConservationLevel>(plant.conservationLevel || 'safe');
+
+  const [unifiedStatus, setUnifiedStatus] = useState<UnifiedConservationStatus>(initialUnifiedStatus);
   const [status, setStatus] = useState<'verified' | 'pending'>(plant.status);
   const [surveyor, setSurveyor] = useState(plant.dataSource?.surveyor || '');
 
-  const handleConservationChange = (val: UnifiedConservationStatus) => {
-    setConservationStatus(val);
-    if (val === 'Nguy cấp / Cần bảo tồn') {
-      setConservationLevel('endangered');
-    } else if (val === 'Sắp nguy cấp') {
-      setConservationLevel('vulnerable');
-    } else {
-      setConservationLevel('safe');
+  // Reset all form states whenever plant or modal opens
+  useEffect(() => {
+    if (plant) {
+      setVietnameseName(plant.vietnameseName || '');
+      setOtherNamesStr((plant.otherNames || []).join(', '));
+      setScientificName(plant.scientificName || '');
+      setFamily(plant.family || '');
+      setCoverImage(plant.coverImage || '');
+      setShortDescription(plant.shortDescription || '');
+      setGrowthForm(plant.identificationTraits?.growthForm || 'Thân thảo');
+      setLeaves(plant.identificationTraits?.leaves || '');
+      setFlowers(plant.identificationTraits?.flowers || '');
+      setFruits(plant.identificationTraits?.fruits || '');
+      setHabitatCategory(plant.habitatCategory || 'garden');
+      setHabitat(plant.habitat || '');
+      setLat(plant.location?.lat?.toString() || '15.485');
+      setLng(plant.location?.lng?.toString() || '108.625');
+      setCommuneSection(plant.location?.communeSection || 'Thôn 1');
+      setAddressDescription(plant.location?.addressDescription || '');
+      setFolkRemedies(plant.traditionalUses?.folkRemedies?.length ? plant.traditionalUses.folkRemedies : ['']);
+      setPartUsedStr((plant.traditionalUses?.partUsed || []).join(', '));
+      setPreparation(plant.traditionalUses?.preparation || 'Sắc nước uống hoặc giã đắp');
+      setInformantName(plant.traditionalUses?.informantName || 'Lương y & Nhân dân xã Tam Anh');
+      setInformantRole(plant.traditionalUses?.informantRole || 'Người dân bản địa');
+      
+      const st = getConservationStatusLabel(
+        plant.conservationStatus,
+        plant.isDisappeared,
+        plant.occurrenceStatus
+      );
+      setUnifiedStatus(st);
+      setStatus(plant.status || 'verified');
+      setSurveyor(plant.dataSource?.surveyor || '');
+      setValidationError(null);
     }
-  };
+  }, [plant, isOpen]);
 
   const [activeTab, setActiveTab] = useState<'general' | 'traits' | 'location' | 'remedy'>('general');
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -142,6 +174,28 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       return;
     }
 
+    let conservationLevel: ConservationLevel = 'safe';
+    let occurrenceStatus: PlantOccurrenceStatus = 'present';
+    let isDisappeared = false;
+
+    if (unifiedStatus === 'Đã biến mất') {
+      occurrenceStatus = 'disappeared';
+      isDisappeared = true;
+      conservationLevel = 'safe';
+    } else if (unifiedStatus === 'Nguy cấp / Cần bảo tồn') {
+      conservationLevel = 'endangered';
+      occurrenceStatus = 'present';
+      isDisappeared = false;
+    } else if (unifiedStatus === 'Sắp nguy cấp') {
+      conservationLevel = 'vulnerable';
+      occurrenceStatus = 'degraded';
+      isDisappeared = false;
+    } else {
+      conservationLevel = 'safe';
+      occurrenceStatus = 'present';
+      isDisappeared = false;
+    }
+
     const updatedData: Partial<MedicinalPlant> = {
       vietnameseName: vietnameseName.trim(),
       otherNames: otherNamesStr.split(',').map((s) => s.trim()).filter(Boolean),
@@ -151,8 +205,10 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       shortDescription: shortDescription.trim(),
       habitatCategory,
       habitat: habitat.trim(),
-      conservationStatus,
+      conservationStatus: unifiedStatus,
       conservationLevel,
+      occurrenceStatus,
+      isDisappeared,
       status,
       identificationTraits: {
         growthForm: growthForm.trim(),
@@ -541,35 +597,122 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Khu vực thôn (15 thôn):
-                  </label>
-                  <select
-                    value={communeSection}
-                    onChange={(e) => setCommuneSection(e.target.value as any)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 text-xs font-semibold"
-                  >
-                    {COMMUNE_VILLAGES.map((v) => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  Khu vực thôn (15 thôn):
+                </label>
+                <select
+                  value={communeSection}
+                  onChange={(e) => setCommuneSection(e.target.value as any)}
+                  className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 text-xs font-semibold"
+                >
+                  {COMMUNE_VILLAGES.map((v) => (
+                    <option key={v} value={v}>{v}</option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Tình trạng bảo tồn:
+              {/* Unified Conservation & Field Occurrence Status */}
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  Tình trạng bảo tồn & Hiện trạng thực địa (Thống nhất):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                    unifiedStatus === 'An toàn' 
+                      ? 'bg-emerald-50/90 border-emerald-500 text-emerald-950 ring-2 ring-emerald-400 shadow-xs' 
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="modalUnifiedStatus"
+                      value="An toàn"
+                      checked={unifiedStatus === 'An toàn'}
+                      onChange={() => setUnifiedStatus('An toàn')}
+                      className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs flex items-center gap-1 text-emerald-800">
+                        <span>🟢</span>
+                        <span>An toàn</span>
+                      </span>
+                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
+                        Còn tồn tại & phát triển bình thường ngoài tự nhiên/vườn nhà.
+                      </span>
+                    </div>
                   </label>
-                  <select
-                    value={conservationStatus}
-                    onChange={(e) => handleConservationChange(e.target.value as UnifiedConservationStatus)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 font-medium text-xs"
-                  >
-                    <option value="An toàn">🟢 An toàn</option>
-                    <option value="Sắp nguy cấp">🟡 Sắp nguy cấp</option>
-                    <option value="Nguy cấp / Cần bảo tồn">🔴 Nguy cấp / Cần bảo tồn</option>
-                  </select>
+
+                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                    unifiedStatus === 'Sắp nguy cấp' 
+                      ? 'bg-amber-50/90 border-amber-500 text-amber-950 ring-2 ring-amber-400 shadow-xs' 
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="modalUnifiedStatus"
+                      value="Sắp nguy cấp"
+                      checked={unifiedStatus === 'Sắp nguy cấp'}
+                      onChange={() => setUnifiedStatus('Sắp nguy cấp')}
+                      className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs flex items-center gap-1 text-amber-800">
+                        <span>🟡</span>
+                        <span>Sắp nguy cấp</span>
+                      </span>
+                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
+                        Bị suy thoái / Suy giảm cá thể / Cần theo dõi bảo vệ.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                    unifiedStatus === 'Nguy cấp / Cần bảo tồn' 
+                      ? 'bg-rose-50/90 border-rose-500 text-rose-950 ring-2 ring-rose-400 shadow-xs' 
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="modalUnifiedStatus"
+                      value="Nguy cấp / Cần bảo tồn"
+                      checked={unifiedStatus === 'Nguy cấp / Cần bảo tồn'}
+                      onChange={() => setUnifiedStatus('Nguy cấp / Cần bảo tồn')}
+                      className="mt-0.5 text-rose-600 focus:ring-rose-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs flex items-center gap-1 text-rose-800">
+                        <span>🔴</span>
+                        <span>Nguy cấp / Cần bảo tồn</span>
+                      </span>
+                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
+                        Quý hiếm theo Sách Đỏ / Cá thể ít, cần ưu tiên nhân giống bảo tồn.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                    unifiedStatus === 'Đã biến mất' 
+                      ? 'bg-stone-200 border-stone-600 text-stone-950 ring-2 ring-stone-500 shadow-xs' 
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="modalUnifiedStatus"
+                      value="Đã biến mất"
+                      checked={unifiedStatus === 'Đã biến mất'}
+                      onChange={() => setUnifiedStatus('Đã biến mất')}
+                      className="mt-0.5 text-stone-600 focus:ring-stone-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs flex items-center gap-1 text-stone-800">
+                        <span>⚫</span>
+                        <span>Đã biến mất</span>
+                      </span>
+                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
+                        Đã mất khỏi vị trí khảo sát / Lưu trữ trong danh mục Điểm đã mất.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
 
