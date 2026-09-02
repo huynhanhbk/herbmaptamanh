@@ -10,7 +10,16 @@ import { QRScannerModal } from './components/QRScannerModal';
 import { SurveyEntryModal } from './components/SurveyEntryModal';
 import { AboutProjectModal } from './components/AboutProjectModal';
 import { MedicinalPlant, AICandidate, PlantMonitoringLog } from './types';
-import { getStoredPlants, saveNewPlant, verifyAdminPasscode, checkAndRunDailyAutoBackup, addPlantMonitoringLog } from './utils/storage';
+import { 
+  getStoredPlants, 
+  saveNewPlant, 
+  verifyAdminPasscode, 
+  checkAndRunDailyAutoBackup, 
+  addPlantMonitoringLog,
+  approvePlantMonitoringLog,
+  rejectPlantMonitoringLog,
+  deletePlantMonitoringLog
+} from './utils/storage';
 import { subscribeToPlantsRealtime, syncInitialPlantsToFirestore } from './lib/plantSync';
 import { Lock, CheckCircle, X, ShieldAlert } from 'lucide-react';
 
@@ -145,17 +154,52 @@ export function App() {
     plantId: string,
     logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>
   ) => {
-    const updated = addPlantMonitoringLog(plantId, logData);
+    const updated = addPlantMonitoringLog(plantId, logData, isAdmin);
     setPlants(updated);
     const updatedPlant = updated.find((p) => p.id === plantId);
     if (updatedPlant) {
       setSelectedPlant(updatedPlant);
     }
-    showToast(
-      logData.status === 'disappeared'
-        ? 'Đã ghi nhận cây biến mất tại vị trí và tự động gỡ điểm đánh dấu khỏi Bản đồ!'
-        : 'Đã cập nhật đợt giám sát thực địa thành công!'
-    );
+    if (isAdmin) {
+      showToast(
+        logData.status === 'disappeared'
+          ? 'Ban Quản trị: Đã duyệt ghi nhận cây biến mất và gỡ điểm đánh dấu khỏi Bản đồ!'
+          : 'Ban Quản trị: Đã ghi nhận & phê duyệt đợt kiểm tra thực địa thành công!'
+      );
+    } else {
+      showToast('Đã gửi báo cáo đợt kiểm tra thực địa! Báo cáo đang ở trạng thái "Chờ duyệt" bởi Ban Quản trị.');
+    }
+  };
+
+  // Admin approval handlers for individual monitoring logs
+  const handleApproveMonitoringLog = (plantId: string, logId: string) => {
+    const updated = approvePlantMonitoringLog(plantId, logId);
+    setPlants(updated);
+    const updatedPlant = updated.find((p) => p.id === plantId);
+    if (updatedPlant) {
+      setSelectedPlant(updatedPlant);
+    }
+    showToast('Đã phê duyệt đợt kiểm tra thực địa và đồng bộ diễn biến cây!');
+  };
+
+  const handleRejectMonitoringLog = (plantId: string, logId: string, reason?: string) => {
+    const updated = rejectPlantMonitoringLog(plantId, logId, reason);
+    setPlants(updated);
+    const updatedPlant = updated.find((p) => p.id === plantId);
+    if (updatedPlant) {
+      setSelectedPlant(updatedPlant);
+    }
+    showToast('Đã từ chối đợt báo cáo thực địa.');
+  };
+
+  const handleDeleteMonitoringLog = (plantId: string, logId: string) => {
+    const updated = deletePlantMonitoringLog(plantId, logId);
+    setPlants(updated);
+    const updatedPlant = updated.find((p) => p.id === plantId);
+    if (updatedPlant) {
+      setSelectedPlant(updatedPlant);
+    }
+    showToast('Đã xóa bản ghi đợt kiểm tra.');
   };
 
   // Handle map coordinate picked
@@ -334,6 +378,10 @@ export function App() {
           onClose={() => setSelectedPlant(null)}
           onOpenMapLocation={handleLocateOnMap}
           onAddMonitoringLog={handleAddMonitoringLog}
+          isAdmin={isAdmin}
+          onApproveMonitoringLog={handleApproveMonitoringLog}
+          onRejectMonitoringLog={handleRejectMonitoringLog}
+          onDeleteMonitoringLog={handleDeleteMonitoringLog}
         />
       )}
 

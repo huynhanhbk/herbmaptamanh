@@ -51,7 +51,7 @@ interface PlantVisualProfile {
 }
 
 /**
- * Extensive botanical profile database of over 30+ Vietnamese medicinal and wild plants
+ * Extensive botanical profile database of 35+ Vietnamese medicinal and wild plants
  */
 const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
   {
@@ -64,8 +64,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'cordate',
     targetFeatures: {
       minGreen: 0.35,
-      preferredEdgeMin: 0.15,
-      preferredEdgeMax: 0.45,
+      preferredEdgeMin: 0.1,
+      preferredEdgeMax: 0.38,
     },
     observedTraitDescriptions: [
       'Cây thân thảo mọc thẳng đứng hoặc hơi bò lan ở gốc, thân có rãnh dọc rõ rệt',
@@ -88,8 +88,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     targetFeatures: {
       minGreen: 0.35,
       brownBonus: 1.2,
-      preferredEdgeMin: 0.15,
-      preferredEdgeMax: 0.4,
+      preferredEdgeMin: 0.1,
+      preferredEdgeMax: 0.35,
     },
     observedTraitDescriptions: [
       'Thân dây leo quấn bám vào thân cây khác hoặc giàn nhờ các rễ bám ở mấu đốt',
@@ -112,7 +112,7 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'ovate',
     targetFeatures: {
       minGreen: 0.25,
-      purpleBonus: 2.2,
+      purpleBonus: 2.5,
       preferredEdgeMin: 0.45,
       preferredEdgeMax: 0.85,
     },
@@ -136,8 +136,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'purple',
     leafShape: 'lanceolate',
     targetFeatures: {
-      minGreen: 0.4,
-      purpleBonus: 1.4,
+      minGreen: 0.38,
+      purpleBonus: 1.5,
       preferredEdgeMin: 0.4,
       preferredEdgeMax: 0.75,
     },
@@ -161,8 +161,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'ovate',
     targetFeatures: {
       minGreen: 0.45,
-      preferredEdgeMin: 0.35,
-      preferredEdgeMax: 0.7,
+      preferredEdgeMin: 0.3,
+      preferredEdgeMax: 0.65,
     },
     observedTraitDescriptions: [
       'Cây thân thảo sống nhiều năm, thân mọng nước phân nhánh nhiều, phủ đầy lông nhung trắng mịn',
@@ -184,9 +184,9 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'pinnate',
     targetFeatures: {
       minGreen: 0.35,
-      whiteBonus: 1.8,
-      preferredEdgeMin: 0.55,
-      preferredEdgeMax: 0.95,
+      whiteBonus: 2.0,
+      preferredEdgeMin: 0.6,
+      preferredEdgeMax: 0.98,
     },
     observedTraitDescriptions: [
       'Cây thân thảo sống nhiều năm cao 0.4 - 1m, thân có rãnh dọc và phủ lông tơ mềm',
@@ -208,11 +208,11 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'purple',
     leafShape: 'ovate',
     targetFeatures: {
-      minGreen: 0.25,
-      purpleBonus: 1.7,
-      redOrangeBonus: 1.6,
+      minGreen: 0.3,
+      purpleBonus: 1.5,
+      redOrangeBonus: 1.8,
       brownBonus: 1.4,
-      preferredEdgeMin: 0.35,
+      preferredEdgeMin: 0.45,
       preferredEdgeMax: 0.85,
     },
     observedTraitDescriptions: [
@@ -235,10 +235,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'white',
     leafShape: 'lanceolate',
     targetFeatures: {
-      minGreen: 0.45,
-      whiteBonus: 1.6,
+      minGreen: 0.4,
+      whiteBonus: 1.8,
       preferredEdgeMin: 0.35,
-      preferredEdgeMax: 0.75,
+      preferredEdgeMax: 0.7,
     },
     observedTraitDescriptions: [
       'Cây thân thảo mọc đứng hoặc bò trườn cao 20-50cm, thân tròn có lông ráp cứng màu nâu đỏ hoặc xanh lục',
@@ -261,10 +261,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'ovate',
     targetFeatures: {
       minGreen: 0.35,
-      whiteBonus: 1.7,
-      brownBonus: 1.2,
-      preferredEdgeMin: 0.2,
-      preferredEdgeMax: 0.55,
+      whiteBonus: 1.6,
+      brownBonus: 1.3,
+      preferredEdgeMin: 0.15,
+      preferredEdgeMax: 0.45,
     },
     observedTraitDescriptions: [
       'Thân dây leo trườn, thân cành cứng nhẵn, có nhiều lóng và đốt rõ',
@@ -287,10 +287,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'ovate',
     targetFeatures: {
       minGreen: 0.3,
-      yellowBonus: 2.1,
-      whiteBonus: 1.9,
+      yellowBonus: 2.2,
+      whiteBonus: 1.8,
       preferredEdgeMin: 0.2,
-      preferredEdgeMax: 0.6,
+      preferredEdgeMax: 0.55,
     },
     observedTraitDescriptions: [
       'Dây leo thân xanh hoặc hơi đỏ tím, cành non có lông tơ mịn',
@@ -312,10 +312,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'ovate',
     targetFeatures: {
       minGreen: 0.3,
-      purpleBonus: 1.5,
+      purpleBonus: 1.4,
       brownBonus: 1.8,
-      preferredEdgeMin: 0.2,
-      preferredEdgeMax: 0.5,
+      preferredEdgeMin: 0.15,
+      preferredEdgeMax: 0.45,
     },
     observedTraitDescriptions: [
       'Dây leo sống nhiều năm, thân quấn có góc cạnh, cành non có lông xám nâu',
@@ -338,8 +338,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     leafShape: 'pinnate',
     targetFeatures: {
       minGreen: 0.2,
-      redOrangeBonus: 2.2,
-      brownBonus: 2.0,
+      redOrangeBonus: 2.5,
+      brownBonus: 2.2,
       preferredEdgeMin: 0.2,
       preferredEdgeMax: 0.55,
     },
@@ -365,8 +365,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     targetFeatures: {
       minGreen: 0.4,
       yellowBonus: 1.6,
-      preferredEdgeMin: 0.2,
-      preferredEdgeMax: 0.5,
+      preferredEdgeMin: 0.15,
+      preferredEdgeMax: 0.45,
     },
     observedTraitDescriptions: [
       'Thân dây leo thảo dài 3-6m, toàn cây có dịch nhựa mủ màu trắng đục',
@@ -387,10 +387,9 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     morphologyCategory: 'herb',
     leafShape: 'pinnate',
     targetFeatures: {
-      minGreen: 0.45,
-      redOrangeBonus: 1.2,
-      preferredEdgeMin: 0.55,
-      preferredEdgeMax: 0.95,
+      minGreen: 0.35,
+      preferredEdgeMin: 0.7,
+      preferredEdgeMax: 0.99,
     },
     observedTraitDescriptions: [
       'Cây thân thảo cao 30-60cm, thân nhẵn màu đỏ ánh tía hoặc xanh lục',
@@ -411,9 +410,9 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     morphologyCategory: 'herb',
     leafShape: 'cordate',
     targetFeatures: {
-      minGreen: 0.55,
-      preferredEdgeMin: 0.3,
-      preferredEdgeMax: 0.7,
+      minGreen: 0.45,
+      preferredEdgeMin: 0.25,
+      preferredEdgeMax: 0.6,
     },
     observedTraitDescriptions: [
       'Cây thân thảo bò lan trên mặt đất bằng các thân bò bén rễ ở các mấu',
@@ -435,9 +434,9 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'white',
     leafShape: 'ovate',
     targetFeatures: {
-      minGreen: 0.45,
-      preferredEdgeMin: 0.2,
-      preferredEdgeMax: 0.5,
+      minGreen: 0.4,
+      preferredEdgeMin: 0.15,
+      preferredEdgeMax: 0.45,
     },
     observedTraitDescriptions: [
       'Cây thân thảo sống dai, không có thân trên mặt đất, lá mọc chụm lại ở gốc thành hình hoa thị',
@@ -458,10 +457,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     morphologyCategory: 'shrub',
     leafShape: 'pinnate',
     targetFeatures: {
-      minGreen: 0.4,
+      minGreen: 0.35,
       brownBonus: 1.4,
-      preferredEdgeMin: 0.6,
-      preferredEdgeMax: 0.95,
+      preferredEdgeMin: 0.65,
+      preferredEdgeMax: 0.98,
     },
     observedTraitDescriptions: [
       'Cây thân bụi nhỏ cao 1-2m, thân nhẵn màu xám có nhiều vết sẹo lá',
@@ -483,11 +482,11 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'purple',
     leafShape: 'lanceolate',
     targetFeatures: {
-      minGreen: 0.4,
+      minGreen: 0.38,
       purpleBonus: 1.4,
       whiteBonus: 1.3,
-      preferredEdgeMin: 0.25,
-      preferredEdgeMax: 0.6,
+      preferredEdgeMin: 0.2,
+      preferredEdgeMax: 0.55,
     },
     observedTraitDescriptions: [
       'Cây thân thảo mọc đứng cao 40-80cm, thân vuông 4 cạnh rất rõ ràng, phân nhiều cành ngang',
@@ -509,8 +508,8 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'yellow',
     leafShape: 'lanceolate',
     targetFeatures: {
-      minGreen: 0.4,
-      yellowBonus: 2.2,
+      minGreen: 0.35,
+      yellowBonus: 2.4,
       preferredEdgeMin: 0.35,
       preferredEdgeMax: 0.7,
     },
@@ -534,10 +533,10 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     flowerColor: 'yellow',
     leafShape: 'linear',
     targetFeatures: {
-      minGreen: 0.4,
+      minGreen: 0.35,
       yellowBonus: 2.0,
-      preferredEdgeMin: 0.15,
-      preferredEdgeMax: 0.45,
+      preferredEdgeMin: 0.1,
+      preferredEdgeMax: 0.4,
     },
     observedTraitDescriptions: [
       'Cây thảo sống dai không có thân trên mặt đất, lá hình mác hẹp dài 20-40cm xếp nếp giống lá cau non',
@@ -548,6 +547,54 @@ const EXTENDED_BOTANICAL_PROFILES: PlantVisualProfile[] = [
     folkUseSummary: 'Thân rễ ngâm rượu hoặc sắc thuốc bổ thận tráng dương, kiện gân cốt, trừ hàn thấp, chữa đau lưng mỏi gối.',
     distinctionTips: 'Lá xếp nếp song song như lá mầm cây cau, hoa vàng 6 cánh mọc sát mặt đất.',
     keywords: ['sâm cau', 'curculigo', 'tiên mao', 'hoa vàng', 'lá cau', 'bổ thận', 'tráng dương'],
+  },
+  {
+    id: 'TA-HERB-021',
+    vietnameseName: 'Sống đời (Thuốc bỏng)',
+    scientificName: 'Kalanchoe pinnata (Lam.) Pers.',
+    family: 'Họ Thuốc bỏng (Crassulaceae)',
+    otherNames: 'Diệp sinh căn, Cây bỏng',
+    morphologyCategory: 'herb',
+    leafShape: 'ovate',
+    targetFeatures: {
+      minGreen: 0.45,
+      preferredEdgeMin: 0.2,
+      preferredEdgeMax: 0.5,
+    },
+    observedTraitDescriptions: [
+      'Cây thân thảo mọng nước cao 40-100cm, thân nhẵn bóng màu xanh ánh tím',
+      'Lá dày cùi mọng nước, mép lá khía tai bèo tròn, có khả năng mọc cây con tại các vết khía',
+      'Cụm hoa hình xim xim rủ xuống, hoa màu đỏ tím hoặc vàng xanh hình ống',
+    ],
+    habitatInCentralVietnam: 'Trồng chậu làm cảnh và làm thuốc quanh hiên nhà các hộ dân Tam Anh.',
+    folkUseSummary: 'Lá tươi giã nát đắp trị bỏng lửa, bỏng nước sôi, tiêu độc vết thương, cầm máu và chữa trĩ.',
+    distinctionTips: 'Lá rất dày mọng nước nhẵn bóng, mép khía tròn sinh mầm cây con độc đáo.',
+    keywords: ['sống đời', 'thuốc bỏng', 'kalanchoe', 'mọng nước', 'bỏng', 'diệp sinh căn'],
+  },
+  {
+    id: 'TA-HERB-022',
+    vietnameseName: 'Bồ công anh',
+    scientificName: 'Lactuca indica L.',
+    family: 'Họ Cúc (Asteraceae)',
+    otherNames: 'Rau bồ cóc, Mũi mác',
+    morphologyCategory: 'herb',
+    flowerColor: 'yellow',
+    leafShape: 'lanceolate',
+    targetFeatures: {
+      minGreen: 0.35,
+      yellowBonus: 1.8,
+      preferredEdgeMin: 0.5,
+      preferredEdgeMax: 0.85,
+    },
+    observedTraitDescriptions: [
+      'Cây thân thảo mọc đứng cao 0.8 - 1.5m, thân thẳng nhẵn ít phân nhánh, toàn cây có mủ trắng đục',
+      'Lá mọc so le, phiến lá mỏng mềm xẻ thùy sâu hình lông chim hoặc hình mũi mác',
+      'Cụm hoa hình đầu màu vàng nhạt hoặc trắng vàng mọc ở ngọn thân và kẽ lá',
+    ],
+    habitatInCentralVietnam: 'Trồng vườn thuốc và mọc hoang đất phù sa bãi bồi ven sông.',
+    folkUseSummary: 'Thanh nhiệt giải độc, tiêu viêm tán kết, chủ trị viêm tuyến vú sưng đau tắc tia sữa, mụn nhọt, viêm dạ dày.',
+    distinctionTips: 'Khi bấm vào thân lá ứa ra dòng nhựa mủ trắng đục, lá mỏng xẻ thùy mềm mại.',
+    keywords: ['bồ công anh', 'lactuca', 'mủ trắng', 'tắc tia sữa', 'viêm vú', 'mũi mác'],
   },
 ];
 

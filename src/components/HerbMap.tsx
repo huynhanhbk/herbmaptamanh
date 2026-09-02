@@ -3,10 +3,12 @@ import L from 'leaflet';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
-  ConservationLevel,
   HABITAT_OPTIONS,
   COMMUNE_VILLAGES,
-  getHabitatLabel
+  getHabitatLabel,
+  SurveyPointStatusKey,
+  SURVEY_POINT_STATUS_CONFIG,
+  getPlantSurveyStatus,
 } from '../types';
 import { 
   Compass, 
@@ -27,7 +29,10 @@ import {
   Wheat,
   ChevronDown,
   ChevronUp,
-  RotateCcw
+  RotateCcw,
+  AlertTriangle,
+  Leaf,
+  X
 } from 'lucide-react';
 
 interface HerbMapProps {
@@ -52,49 +57,62 @@ export const HerbMap: React.FC<HerbMapProps> = ({
   const markersGroupRef = useRef<L.LayerGroup | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
-  // Filters inside map view
+  // Filters inside map view - Unified 5 status filters
   const [selectedHabitat, setSelectedHabitat] = useState<'all' | HabitatCategory>('all');
-  const [selectedConservation, setSelectedConservation] = useState<'all' | ConservationLevel | 'pending'>('all');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | SurveyPointStatusKey>('all');
   const [showOnlyVerified, setShowOnlyVerified] = useState<boolean>(false);
-  const [showDisappearedHistory, setShowDisappearedHistory] = useState<boolean>(false);
   const [isFilterExpanded, setIsFilterExpanded] = useState<boolean>(false);
   const [mapTileLayer, setMapTileLayer] = useState<'osm' | 'topo'>('osm');
   const [locatingUser, setLocatingUser] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [pickedMarkerCoords, setPickedMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsNotification, setGpsNotification] = useState<string | null>(null);
 
-  // Disappeared plants count
-  const disappearedCount = useMemo(() => {
-    return plants.filter((p) => p.isDisappeared || p.occurrenceStatus === 'disappeared').length;
-  }, [plants]);
-
-  // Habitat plant counts for radio badges (calculated on active/non-disappeared plants by default)
-  const habitatCounts = useMemo(() => {
-    const activePlants = showDisappearedHistory
-      ? plants
-      : plants.filter((p) => !p.isDisappeared && p.occurrenceStatus !== 'disappeared');
-    const counts: Record<string, number> = { all: activePlants.length };
-    HABITAT_OPTIONS.forEach((h) => {
-      counts[h.id] = activePlants.filter((p) => p.habitatCategory === h.id).length;
+  // Calculate counts for each of the 5 unified survey statuses
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      all: plants.length,
+      safe: 0,
+      vulnerable: 0,
+      endangered: 0,
+      disappeared: 0,
+      new: 0,
+    };
+    plants.forEach((p) => {
+      const meta = getPlantSurveyStatus(p);
+      counts[meta.key] = (counts[meta.key] || 0) + 1;
     });
     return counts;
-  }, [plants, showDisappearedHistory]);
+  }, [plants]);
 
-  // Filtered plant count
-  const filteredPlantsCount = useMemo(() => {
+  // Habitat plant counts
+  const habitatCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: plants.length };
+    HABITAT_OPTIONS.forEach((h) => {
+      counts[h.id] = plants.filter((p) => p.habitatCategory === h.id).length;
+    });
+    return counts;
+  }, [plants]);
+
+  // Filtered plants based on unified 5 statuses and habitat
+  const filteredPlants = useMemo(() => {
     return plants.filter((plant) => {
-      const isPlantDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
-      if (isPlantDisappeared && !showDisappearedHistory) return false;
-      if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) return false;
-      if (selectedConservation === 'pending') {
-        if (plant.status !== 'pending') return false;
-      } else if (selectedConservation !== 'all') {
-        if (plant.conservationLevel !== selectedConservation) return false;
+      const meta = getPlantSurveyStatus(plant);
+      
+      // If user is filtering by a specific status
+      if (selectedStatus !== 'all') {
+        if (meta.key !== selectedStatus) return false;
+      } else {
+        // By default when viewing 'all', hide disappeared plants unless user specifically selects 'disappeared' status
+        if (meta.key === 'disappeared') return false;
       }
+
+      if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) return false;
       if (showOnlyVerified && plant.status !== 'verified') return false;
+
       return true;
-    }).length;
-  }, [plants, selectedHabitat, selectedConservation, showOnlyVerified, showDisappearedHistory]);
+    });
+  }, [plants, selectedStatus, selectedHabitat, showOnlyVerified]);
 
   // Helper for habitat icons
   const renderHabitatIcon = (id: string) => {
@@ -151,7 +169,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     };
   }, []);
 
-  // Handle map click for coordinate picking with active closure & cursor styling
+  // Handle map click for coordinate picking
   useEffect(() => {
     if (!mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
@@ -207,47 +225,75 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     }
   }, [mapTileLayer]);
 
-  // Create custom marker icons based on conservation & habitat
+  /**
+   * Create custom marker icon strictly following the 5 unified survey statuses:
+   * 1. safe: Emerald Green with Leaf SVG
+   * 2. vulnerable: Amber Yellow with Alert Triangle SVG (includes degraded)
+   * 3. endangered: Rose Red with Shield Alert SVG
+   * 4. disappeared: Dark Stone with X SVG
+   * 5. new: Violet Purple with Sparkles/Star SVG
+   */
   const createHerbIcon = (plant: MedicinalPlant, isSelected: boolean) => {
-    const isPlantDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
-    let bgColor = 'bg-emerald-600';
-    let borderColor = 'border-white';
-    let ringColor = 'ring-emerald-400/50';
+    const statusMeta = getPlantSurveyStatus(plant);
+    const sizeClass = isSelected 
+      ? 'w-10 h-10 -translate-x-5 -translate-y-5 ring-4 ring-white shadow-2xl scale-110' 
+      : 'w-8 h-8 -translate-x-4 -translate-y-4 shadow-md';
 
-    if (isPlantDisappeared) {
-      bgColor = 'bg-stone-600';
-      borderColor = 'border-rose-400';
-      ringColor = 'ring-stone-400/50';
-    } else if (plant.status === 'pending') {
-      bgColor = 'bg-purple-600';
-      ringColor = 'ring-purple-400/50';
-    } else if (plant.conservationLevel === 'endangered') {
-      bgColor = 'bg-rose-600';
-      ringColor = 'ring-rose-400/50';
-    } else if (plant.conservationLevel === 'vulnerable') {
-      bgColor = 'bg-amber-600';
-      ringColor = 'ring-amber-400/50';
+    let iconSvg = '';
+    switch (statusMeta.key) {
+      case 'safe':
+        // Clean Leaf SVG
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+            <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+          </svg>
+        `;
+        break;
+      case 'vulnerable':
+        // Alert Triangle SVG
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        `;
+        break;
+      case 'endangered':
+        // Shield Alert / Shield Danger SVG
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        `;
+        break;
+      case 'disappeared':
+        // X cross SVG
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-stone-200" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        `;
+        break;
+      case 'new':
+        // Sparkles / Star SVG
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>
+          </svg>
+        `;
+        break;
     }
 
-    const sizeClass = isSelected ? 'w-10 h-10 -translate-x-5 -translate-y-5 ring-4' : 'w-8 h-8 -translate-x-4 -translate-y-4';
-
     const html = `
-      <div class="relative group cursor-pointer">
-        <div class="${sizeClass} ${bgColor} ${ringColor} ${borderColor} rounded-full border-2 shadow-lg flex items-center justify-center text-white transition-all transform hover:scale-110 ${isPlantDisappeared ? 'opacity-75' : ''}">
-          ${isPlantDisappeared ? `
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-rose-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          ` : `
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
-              <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
-            </svg>
-          `}
+      <div class="relative group cursor-pointer transition-transform duration-200 hover:scale-110">
+        <div class="${sizeClass} ${statusMeta.markerBg} ${statusMeta.markerRing} border-2 border-white rounded-full flex items-center justify-center text-white ${statusMeta.key === 'disappeared' ? 'opacity-80 ring-stone-400/50' : ''}">
+          ${iconSvg}
         </div>
-        ${plant.status === 'pending' && !isPlantDisappeared ? '<span class="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 border border-white rounded-full"></span>' : ''}
-        ${isPlantDisappeared ? '<span class="absolute -top-1 -right-1 px-1 py-0.2 text-[8px] font-bold bg-rose-600 text-white rounded-full border border-white">Hết</span>' : ''}
       </div>
     `;
 
@@ -267,76 +313,56 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     const markersGroup = markersGroupRef.current;
     markersGroup.clearLayers();
 
-    // Filter plants (automatically exclude disappeared plants unless showDisappearedHistory is ON)
-    const filteredPlants = plants.filter((plant) => {
-      const isPlantDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
-      if (isPlantDisappeared && !showDisappearedHistory) return false;
-      if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) return false;
-      if (selectedConservation === 'pending') {
-        if (plant.status !== 'pending') return false;
-      } else if (selectedConservation !== 'all') {
-        if (plant.conservationLevel !== selectedConservation) return false;
-      }
-      if (showOnlyVerified && plant.status !== 'verified') return false;
-      return true;
-    });
-
     filteredPlants.forEach((plant) => {
       const isSelected = selectedPlantId === plant.id;
-      const isPlantDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
+      const statusMeta = getPlantSurveyStatus(plant);
       const icon = createHerbIcon(plant, isSelected);
 
       const marker = L.marker([plant.location.lat, plant.location.lng], { icon });
 
       // Create Custom Popup
       const popupDiv = document.createElement('div');
-      popupDiv.className = 'w-64 sm:w-72 overflow-hidden rounded-xl bg-white font-sans text-stone-800 shadow-md';
+      popupDiv.className = 'w-64 sm:w-72 overflow-hidden rounded-2xl bg-white font-sans text-stone-800 shadow-xl border border-stone-200';
 
-      let statusBadge = '';
-      if (isPlantDisappeared) {
-        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">⚠️ Đã biến mất tại tọa độ này</span>';
-      } else if (plant.status === 'pending') {
-        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">Điểm mới (chờ duyệt)</span>';
-      } else if (plant.conservationLevel === 'endangered') {
-        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">Nguy cấp / Cần bảo tồn</span>';
-      } else if (plant.conservationLevel === 'vulnerable') {
-        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">Sắp nguy cấp</span>';
-      } else {
-        statusBadge = '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">An toàn</span>';
-      }
+      const statusBadge = `
+        <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border shadow-2xs ${statusMeta.badgeClass} flex items-center gap-1">
+          <span>${statusMeta.emoji}</span>
+          <span>${statusMeta.label}</span>
+        </span>
+      `;
 
       popupDiv.innerHTML = `
         <div class="relative h-28 w-full overflow-hidden bg-stone-100">
-          <img src="${plant.coverImage}" alt="${plant.vietnameseName}" class="w-full h-full object-cover ${isPlantDisappeared ? 'grayscale opacity-75' : ''}" />
+          <img src="${plant.coverImage}" alt="${plant.vietnameseName}" class="w-full h-full object-cover ${statusMeta.key === 'disappeared' ? 'grayscale opacity-75' : ''}" />
           <div class="absolute top-2 left-2 flex gap-1">
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/60 text-white backdrop-blur-xs font-mono">${plant.id}</span>
-            ${plant.status === 'pending' ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-700 text-white">Chờ duyệt</span>' : ''}
-            ${isPlantDisappeared ? '<span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-700 text-white">Lịch sử</span>' : ''}
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/70 text-white backdrop-blur-xs font-mono">${plant.id}</span>
           </div>
           <div class="absolute bottom-2 right-2">
             ${statusBadge}
           </div>
         </div>
-        <div class="p-3">
-          <h3 class="font-bold text-sm text-stone-900 leading-snug ${isPlantDisappeared ? 'line-through text-stone-500' : ''}">${plant.vietnameseName}</h3>
-          <p class="text-xs text-stone-500 italic mb-1.5">${plant.scientificName}</p>
-          ${isPlantDisappeared ? `
-            <div class="p-1.5 mb-2 bg-rose-50 border border-rose-200 rounded-lg text-[11px] text-rose-800">
-              📌 <b>Lưu ý:</b> Đợt giám sát mới nhất ghi nhận cây không còn tại vị trí này.
+        <div class="p-3.5 space-y-2">
+          <div>
+            <h3 class="font-bold text-sm text-stone-900 leading-snug ${statusMeta.key === 'disappeared' ? 'line-through text-stone-500' : ''}">${plant.vietnameseName}</h3>
+            <p class="text-xs text-stone-500 italic font-serif">${plant.scientificName}</p>
+          </div>
+          
+          <div class="p-2 rounded-xl bg-stone-50 border border-stone-100 text-[11px] space-y-1">
+            <p class="text-stone-600 line-clamp-2 leading-relaxed">${plant.shortDescription}</p>
+            <div class="text-[10px] font-semibold ${statusMeta.textClass} pt-1 border-t border-stone-200/60">
+              📌 ${statusMeta.subLabel}
             </div>
-          ` : `
-            <p class="text-[11px] text-stone-600 line-clamp-2 mb-2 leading-relaxed">${plant.shortDescription}</p>
-          `}
-          <div class="flex items-center justify-between text-[11px] text-stone-500 pt-2 border-t border-stone-100">
-            <span class="truncate max-w-[150px]">📍 ${plant.location.communeSection}</span>
-            <button id="btn-view-${plant.id}" class="px-2.5 py-1 rounded-md bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-[11px] transition-colors shadow-xs">
-              Lịch sử & Chi tiết
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-stone-500 pt-1.5 border-t border-stone-100">
+            <span class="truncate max-w-[130px]">📍 ${plant.location.communeSection}</span>
+            <button id="btn-view-${plant.id}" class="px-3 py-1 rounded-lg ${statusMeta.bgClass} hover:opacity-90 text-white font-semibold text-[11px] transition-all shadow-xs cursor-pointer">
+              Xem hồ sơ & Lịch sử
             </button>
           </div>
         </div>
       `;
 
-      // Bind button click event inside popup
       marker.bindPopup(popupDiv, { maxWidth: 300, minWidth: 260 });
       marker.on('popupopen', () => {
         const btn = document.getElementById(`btn-view-${plant.id}`);
@@ -345,87 +371,71 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         }
       });
 
-      marker.addTo(markersGroup);
-
-      // If this plant is the selected one, pan to it
-      if (isSelected && mapInstanceRef.current) {
-        mapInstanceRef.current.setView([plant.location.lat, plant.location.lng], 16, { animate: true });
-        marker.openPopup();
-      }
-    });
-
-    // If picking coordinates mode, show picked marker
-    if (pickingCoordinatesMode && pickedMarkerCoords && mapInstanceRef.current) {
-      const pickIcon = L.divIcon({
-        className: 'custom-pick-icon',
-        html: `
-          <div class="w-8 h-8 -translate-x-4 -translate-y-4 rounded-full bg-indigo-600 border-2 border-white shadow-xl flex items-center justify-center text-white animate-bounce">
-            📍
-          </div>
-        `,
-        iconSize: [32, 32],
+      marker.on('click', () => {
+        onSelectPlant(plant);
       });
-      L.marker([pickedMarkerCoords.lat, pickedMarkerCoords.lng], { icon: pickIcon })
-        .bindPopup('<b>Tọa độ mới được chọn</b><br>Bấm vào biểu mẫu để lưu vị trí này.')
-        .addTo(markersGroup)
-        .openPopup();
+
+      markersGroup.addLayer(marker);
+    });
+  }, [filteredPlants, selectedPlantId, onSelectPlant]);
+
+  // Center on Selected Plant when selectedPlantId changes
+  useEffect(() => {
+    if (!selectedPlantId || !mapInstanceRef.current) return;
+    const plant = plants.find((p) => p.id === selectedPlantId);
+    if (plant) {
+      mapInstanceRef.current.setView([plant.location.lat, plant.location.lng], 16, {
+        animate: true,
+      });
     }
-  }, [plants, selectedHabitat, selectedConservation, showOnlyVerified, selectedPlantId, pickingCoordinatesMode, pickedMarkerCoords]);
+  }, [selectedPlantId, plants]);
 
-  const [gpsNotification, setGpsNotification] = useState<string | null>(null);
-
-  // Locate User GPS position
+  // Locate User GPS
   const handleLocateMe = () => {
-    setGpsNotification(null);
     if (!navigator.geolocation) {
       setGpsNotification('Trình duyệt không hỗ trợ định vị GPS.');
+      setTimeout(() => setGpsNotification(null), 3000);
       return;
     }
 
     setLocatingUser(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      (pos) => {
         setLocatingUser(false);
-        const { latitude, longitude, accuracy } = position.coords;
+        const { latitude, longitude } = pos.coords;
         setUserLocation({ lat: latitude, lng: longitude });
 
         if (mapInstanceRef.current) {
           mapInstanceRef.current.setView([latitude, longitude], 16, { animate: true });
 
-          // Remove old user marker
           if (userLocationMarkerRef.current) {
-            userLocationMarkerRef.current.remove();
+            userLocationMarkerRef.current.setLatLng([latitude, longitude]);
+          } else {
+            const userIcon = L.divIcon({
+              className: 'user-loc-icon',
+              html: `
+                <div class="relative flex items-center justify-center">
+                  <div class="w-6 h-6 rounded-full bg-blue-500 border-2 border-white shadow-xl animate-pulse"></div>
+                  <div class="absolute w-10 h-10 rounded-full bg-blue-400/30 animate-ping"></div>
+                </div>
+              `,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            });
+
+            const marker = L.marker([latitude, longitude], { icon: userIcon }).addTo(mapInstanceRef.current);
+            marker.bindPopup('<b>Vị trí thực địa của bạn</b>');
+            userLocationMarkerRef.current = marker;
           }
-
-          const userIcon = L.divIcon({
-            className: 'user-gps-marker',
-            html: `
-              <div class="relative flex items-center justify-center">
-                <span class="animate-ping absolute inline-flex h-6 w-6 rounded-full bg-blue-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-4 w-4 bg-blue-600 border-2 border-white shadow-md"></span>
-              </div>
-            `,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          });
-
-          const userMarker = L.marker([latitude, longitude], { icon: userIcon })
-            .bindPopup(`<b>Vị trí thực địa của bạn</b><br>Độ chính xác: ±${Math.round(accuracy)}m`)
-            .addTo(mapInstanceRef.current);
-
-          userLocationMarkerRef.current = userMarker;
-          userMarker.openPopup();
         }
       },
-      (error: GeolocationPositionError) => {
+      (err) => {
         setLocatingUser(false);
-        let msg = 'Không thể lấy vị trí GPS.';
-        if (error.code === 1) {
-          msg = 'Quyền GPS bị chặn hoặc không được cấp phép.';
-        } else if (error.code === 2) {
-          msg = 'Tín hiệu vị trí hiện không khả dụng.';
-        } else if (error.code === 3) {
-          msg = 'Hết thời gian chờ phản hồi GPS.';
+        let msg = 'Không thể lấy định vị GPS.';
+        if (err.code === 1) {
+          msg = 'Vui lòng cấp quyền truy cập vị trí trên trình duyệt.';
+        } else if (err.code === 2) {
+          msg = 'Không tìm thấy tín hiệu vệ tinh GPS.';
         }
         setGpsNotification(msg);
         setTimeout(() => setGpsNotification(null), 4000);
@@ -469,9 +479,9 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         </div>
       )}
 
-      {/* Floating Filter Bar (Top overlay) - Streamlined & Minimalist */}
+      {/* Unified Filter Bar (Top overlay) */}
       <div className="absolute top-3 left-3 right-3 sm:right-auto sm:max-w-xl md:max-w-2xl z-10 flex flex-col gap-1.5 pointer-events-none transition-all">
-        <div className="pointer-events-auto bg-stone-900/95 backdrop-blur-md px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-2xl border border-stone-800/90 shadow-xl text-xs space-y-2">
+        <div className="pointer-events-auto bg-stone-900/95 backdrop-blur-md px-3 py-2.5 sm:px-4 sm:py-3 rounded-2xl border border-stone-800/90 shadow-2xl text-xs space-y-2.5">
           {/* Header Bar with quick status badge and Toggle */}
           <div className="flex items-center justify-between gap-2">
             <div 
@@ -483,26 +493,25 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                 <Filter className="w-3.5 h-3.5" />
               </div>
               <span className="font-bold text-stone-200 text-xs tracking-wide group-hover:text-white transition-colors truncate">
-                Lọc Sinh Cảnh & Điểm Thuốc
+                Lọc 5 Trạng Thái & Sinh Cảnh
               </span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[11px] font-semibold font-mono shrink-0">
-                {filteredPlantsCount}/{plants.length}
+                {filteredPlants.length}/{plants.length}
               </span>
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
-              {(selectedHabitat !== 'all' || selectedConservation !== 'all' || showOnlyVerified || showDisappearedHistory) && (
+              {(selectedHabitat !== 'all' || selectedStatus !== 'all' || showOnlyVerified) && (
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setSelectedHabitat('all');
-                    setSelectedConservation('all');
+                    setSelectedStatus('all');
                     setShowOnlyVerified(false);
-                    setShowDisappearedHistory(false);
                   }}
                   className="px-2 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 text-[11px] font-medium flex items-center gap-1 transition-colors border border-stone-700"
-                  title="Đặt lại toàn bộ bộ lọc về mặc định"
+                  title="Đặt lại bộ lọc về mặc định"
                 >
                   <RotateCcw className="w-3 h-3" />
                   <span className="hidden sm:inline">Đặt lại</span>
@@ -514,64 +523,118 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                 className="px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-[11px] font-medium flex items-center gap-1 transition-colors border border-stone-700"
                 title={isFilterExpanded ? 'Thu gọn bộ lọc' : 'Mở rộng bộ lọc'}
               >
-                <span>{isFilterExpanded ? 'Thu gọn' : 'Lọc chi tiết'}</span>
+                <span>{isFilterExpanded ? 'Thu gọn' : 'Tùy chọn'}</span>
                 {isFilterExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
               </button>
             </div>
           </div>
 
-          {/* Compact summary bar when collapsed */}
-          {!isFilterExpanded && (
-            <div className="flex items-center justify-between text-[11px] text-stone-300 pt-1 border-t border-stone-800/80">
-              <div className="flex items-center gap-1.5 truncate text-stone-400">
-                <span>Đang hiển thị:</span>
-                <span className="font-semibold text-emerald-400 truncate">
-                  {selectedHabitat === 'all' ? 'Tất cả sinh cảnh' : getHabitatLabel(selectedHabitat)}
-                </span>
-                {selectedConservation !== 'all' && (
-                  <>
-                    <span>•</span>
-                    <span className="text-amber-300 font-medium">
-                      {selectedConservation === 'safe' ? 'An toàn' : selectedConservation === 'vulnerable' ? 'Sắp nguy cấp' : selectedConservation === 'endangered' ? 'Nguy cấp' : 'Điểm mới'}
-                    </span>
-                  </>
-                )}
-                {showOnlyVerified && (
-                  <>
-                    <span>•</span>
-                    <span className="text-emerald-300">Đã duyệt</span>
-                  </>
-                )}
-                {showDisappearedHistory && (
-                  <>
-                    <span>•</span>
-                    <span className="text-rose-300">Kèm điểm đã mất</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Quick 5-Status Filter Pills Row (Always visible, uncluttered) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
+            <button
+              onClick={() => setSelectedStatus('all')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'all'
+                  ? 'bg-stone-700 text-white font-bold shadow-xs border border-stone-500 ring-1 ring-white/20'
+                  : 'text-stone-400 hover:text-stone-200 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>Tất cả</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-stone-900 text-stone-300">
+                {statusCounts.all}
+              </span>
+            </button>
 
-          {/* Expanded Filter Panel */}
+            {/* 1. An toàn */}
+            <button
+              onClick={() => setSelectedStatus('safe')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'safe'
+                  ? 'bg-emerald-700 text-white font-bold shadow-xs border border-emerald-400 ring-1 ring-emerald-300/40'
+                  : 'text-emerald-300 hover:bg-emerald-950/80 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>🟢 An toàn</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-200">
+                {statusCounts.safe}
+              </span>
+            </button>
+
+            {/* 2. Sắp nguy cấp (Gồm Suy thoái) */}
+            <button
+              onClick={() => setSelectedStatus('vulnerable')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'vulnerable'
+                  ? 'bg-amber-600 text-white font-bold shadow-xs border border-amber-300 ring-1 ring-amber-300/40'
+                  : 'text-amber-300 hover:bg-amber-950/80 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>🟡 Sắp nguy cấp</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-200">
+                {statusCounts.vulnerable}
+              </span>
+            </button>
+
+            {/* 3. Nguy cấp / Cần bảo tồn */}
+            <button
+              onClick={() => setSelectedStatus('endangered')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'endangered'
+                  ? 'bg-rose-700 text-white font-bold shadow-xs border border-rose-400 ring-1 ring-rose-300/40'
+                  : 'text-rose-300 hover:bg-rose-950/80 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>🔴 Nguy cấp</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-rose-950 text-rose-200">
+                {statusCounts.endangered}
+              </span>
+            </button>
+
+            {/* 4. Điểm đã mất */}
+            <button
+              onClick={() => setSelectedStatus('disappeared')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'disappeared'
+                  ? 'bg-stone-600 text-white font-bold shadow-xs border border-stone-400 ring-1 ring-stone-300/40'
+                  : 'text-stone-400 hover:bg-stone-750 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>⚫ Đã mất</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-stone-900 text-stone-300">
+                {statusCounts.disappeared}
+              </span>
+            </button>
+
+            {/* 5. Điểm mới */}
+            <button
+              onClick={() => setSelectedStatus('new')}
+              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
+                selectedStatus === 'new'
+                  ? 'bg-purple-700 text-white font-bold shadow-xs border border-purple-400 ring-1 ring-purple-300/40'
+                  : 'text-purple-300 hover:bg-purple-950/80 bg-stone-800/80 border border-stone-700/60'
+              }`}
+            >
+              <span>🟣 Điểm mới</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-purple-950 text-purple-200">
+                {statusCounts.new}
+              </span>
+            </button>
+          </div>
+
+          {/* Expanded Filter Panel (Habitats & Verified check) */}
           {isFilterExpanded && (
-            <div className="space-y-2 pt-1 border-t border-stone-800/80 animate-fadeIn">
-              {/* Habitat Selection (Compact Pill/Grid) */}
+            <div className="space-y-2.5 pt-2 border-t border-stone-800/80 animate-fadeIn">
+              {/* Habitat Selection Grid */}
               <div>
                 <div className="flex items-center justify-between text-[11px] text-stone-400 mb-1 px-0.5">
                   <span className="font-medium">Sinh cảnh phân bố:</span>
-                  <span className="text-emerald-400 text-[10px]">06 loại thực địa</span>
+                  <span className="text-emerald-400 text-[10px]">06 loại thực địa Tam Anh</span>
                 </div>
 
-                <div 
-                  role="radiogroup" 
-                  aria-label="Chọn nhóm sinh cảnh"
-                  className="grid grid-cols-2 sm:grid-cols-4 gap-1.5"
-                >
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {/* All option */}
                   <button
                     type="button"
-                    role="radio"
-                    aria-checked={selectedHabitat === 'all'}
                     onClick={() => setSelectedHabitat('all')}
                     className={`px-2.5 py-1.5 rounded-xl text-left flex items-center justify-between gap-1.5 transition-all cursor-pointer border ${
                       selectedHabitat === 'all'
@@ -595,8 +658,6 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                       <button
                         key={hab.id}
                         type="button"
-                        role="radio"
-                        aria-checked={isSelected}
                         onClick={() => setSelectedHabitat(hab.id)}
                         className={`px-2 py-1.5 rounded-xl text-left flex items-center justify-between gap-1 transition-all cursor-pointer border ${
                           isSelected
@@ -606,9 +667,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                       >
                         <div className="flex items-center gap-1.5 min-w-0 truncate">
                           {renderHabitatIcon(hab.id)}
-                          <span className="text-[11px] truncate">
-                            {hab.label}
-                          </span>
+                          <span className="text-[11px] truncate">{hab.label}</span>
                         </div>
                         <span className={`text-[10px] px-1 py-0.2 rounded font-mono shrink-0 ${
                           isSelected ? 'bg-emerald-950 text-emerald-200' : 'bg-stone-900 text-stone-400'
@@ -621,90 +680,17 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                 </div>
               </div>
 
-              {/* Conservation status & verified toggle */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-800/80 pt-2 text-xs">
-                <div className="flex items-center gap-1 overflow-x-auto pb-0.5 scrollbar-none">
-                  <span className="text-stone-400 text-[11px] font-medium shrink-0 mr-1">Bảo tồn:</span>
-                  <button
-                    onClick={() => setSelectedConservation('all')}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap transition-colors ${
-                      selectedConservation === 'all' ? 'text-white bg-stone-700 font-semibold border border-stone-600' : 'text-stone-400 hover:text-stone-200'
-                    }`}
-                  >
-                    Tất cả
-                  </button>
-                  <button
-                    onClick={() => setSelectedConservation('safe')}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
-                      selectedConservation === 'safe'
-                        ? 'bg-emerald-900/90 text-emerald-200 border border-emerald-600 font-semibold'
-                        : 'text-emerald-400 hover:text-emerald-300'
-                    }`}
-                  >
-                    🟢 An toàn
-                  </button>
-                  <button
-                    onClick={() => setSelectedConservation('vulnerable')}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
-                      selectedConservation === 'vulnerable'
-                        ? 'bg-amber-900/90 text-amber-200 border border-amber-600 font-semibold'
-                        : 'text-amber-400 hover:text-amber-300'
-                    }`}
-                  >
-                    🟡 Sắp nguy cấp
-                  </button>
-                  <button
-                    onClick={() => setSelectedConservation('endangered')}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
-                      selectedConservation === 'endangered'
-                        ? 'bg-rose-900/90 text-rose-200 border border-rose-600 font-semibold'
-                        : 'text-rose-400 hover:text-rose-300'
-                    }`}
-                  >
-                    🔴 Nguy cấp
-                  </button>
-                  <button
-                    onClick={() => setSelectedConservation('pending')}
-                    className={`px-2 py-1 rounded-lg text-[11px] font-medium whitespace-nowrap flex items-center gap-1 transition-colors ${
-                      selectedConservation === 'pending'
-                        ? 'bg-purple-900/90 text-purple-200 border border-purple-600 font-semibold'
-                        : 'text-purple-400 hover:text-purple-300'
-                    }`}
-                  >
-                    🟣 Điểm mới
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-stone-300 shrink-0 bg-stone-800/80 px-2 py-1 rounded-lg border border-stone-700 hover:bg-stone-750 transition-colors">
-                    <input
-                      type="checkbox"
-                      checked={showOnlyVerified}
-                      onChange={(e) => setShowOnlyVerified(e.target.checked)}
-                      className="rounded border-stone-600 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 bg-stone-900"
-                    />
-                    <span>Đã kiểm duyệt</span>
-                  </label>
-
-                  {disappearedCount > 0 && (
-                    <label 
-                      className={`flex items-center gap-1.5 cursor-pointer select-none text-[11px] shrink-0 px-2 py-1 rounded-lg border transition-colors ${
-                        showDisappearedHistory 
-                          ? 'bg-rose-950/80 text-rose-200 border-rose-700' 
-                          : 'bg-stone-800/80 text-stone-400 border-stone-700 hover:text-stone-300'
-                      }`}
-                      title="Bật để xem lại các điểm khảo sát trong lịch sử nay cây đã biến mất"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={showDisappearedHistory}
-                        onChange={(e) => setShowDisappearedHistory(e.target.checked)}
-                        className="rounded border-stone-600 text-rose-600 focus:ring-rose-500 h-3.5 w-3.5 bg-stone-900"
-                      />
-                      <span>Điểm đã mất ({disappearedCount})</span>
-                    </label>
-                  )}
-                </div>
+              {/* Verified checkbox */}
+              <div className="flex items-center justify-between pt-1 border-t border-stone-800/80 text-[11px]">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-stone-300">
+                  <input
+                    type="checkbox"
+                    checked={showOnlyVerified}
+                    onChange={(e) => setShowOnlyVerified(e.target.checked)}
+                    className="rounded border-stone-600 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 bg-stone-900"
+                  />
+                  <span>Chỉ hiển thị các điểm đã kiểm duyệt thực địa</span>
+                </label>
               </div>
             </div>
           )}
@@ -717,7 +703,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         <button
           onClick={handleLocateMe}
           disabled={locatingUser}
-          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-emerald-700"
+          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all text-emerald-700 cursor-pointer"
           title="Định vị vị trí hiện tại ngoài thực địa (GPS)"
         >
           <Navigation className={`w-5 h-5 ${locatingUser ? 'animate-spin text-blue-600' : ''}`} />
@@ -726,7 +712,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         {/* Center on Tam Anh */}
         <button
           onClick={handleCenterTamAnh}
-          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer"
           title="Đưa về tâm xã Tam Anh"
         >
           <Compass className="w-5 h-5 text-emerald-700" />
@@ -735,34 +721,85 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         {/* Toggle Tile Layer: Standard / Topo */}
         <button
           onClick={() => setMapTileLayer(mapTileLayer === 'osm' ? 'topo' : 'osm')}
-          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all"
+          className="w-11 h-11 rounded-xl bg-white text-stone-800 hover:bg-stone-50 border border-stone-200 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer"
           title="Chuyển đổi lớp bản đồ (Địa hình / Đường sá)"
         >
           <Layers className="w-5 h-5 text-stone-700" />
         </button>
       </div>
 
-      {/* Map Legend (Bottom left) */}
-      <div className="absolute bottom-4 left-3 z-10 hidden sm:block bg-stone-900/90 backdrop-blur-md p-3.5 rounded-2xl border border-stone-800 shadow-xl text-stone-200 text-xs max-w-xs">
-        <h4 className="font-semibold text-stone-300 text-[11px] uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-          <Info className="w-3.5 h-3.5 text-emerald-400" /> Chú giải điểm khảo sát
-        </h4>
-        <div className="grid grid-cols-2 gap-y-2 gap-x-3 text-[11px]">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-emerald-600 border border-white inline-block shrink-0"></span>
-            <span className="truncate">An toàn</span>
+      {/* Simple Clean Map Legend (Bottom left) */}
+      <div className="absolute bottom-4 left-3 z-10 select-none">
+        <div className="bg-stone-900/95 backdrop-blur-md px-4 py-3 rounded-2xl sm:rounded-3xl border border-stone-800 shadow-2xl text-stone-200 text-xs">
+          {/* Header */}
+          <div className="flex items-center gap-2 mb-2.5 text-stone-100 font-bold text-xs tracking-wide">
+            <span className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 text-[10px] font-bold">
+              i
+            </span>
+            <span>CHÚ GIẢI ĐIỂM KHẢO SÁT</span>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-amber-600 border border-white inline-block shrink-0"></span>
-            <span className="truncate">Sắp nguy cấp</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-rose-600 border border-white inline-block shrink-0"></span>
-            <span className="truncate">Nguy cấp / Cần bảo tồn</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-purple-600 border border-white inline-block shrink-0"></span>
-            <span className="truncate">Điểm mới (chờ duyệt)</span>
+
+          {/* Clean Status Items Grid */}
+          <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs">
+            {/* An toàn */}
+            <div 
+              onClick={() => setSelectedStatus(selectedStatus === 'safe' ? 'all' : 'safe')}
+              className="flex items-center gap-2 cursor-pointer group transition-colors"
+              title="Nhấp để lọc điểm An toàn"
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-[#059669] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
+              <span className={`transition-colors ${selectedStatus === 'safe' ? 'text-emerald-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
+                An toàn
+              </span>
+            </div>
+
+            {/* Sắp nguy cấp */}
+            <div 
+              onClick={() => setSelectedStatus(selectedStatus === 'vulnerable' ? 'all' : 'vulnerable')}
+              className="flex items-center gap-2 cursor-pointer group transition-colors"
+              title="Nhấp để lọc điểm Sắp nguy cấp"
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-[#d97706] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
+              <span className={`transition-colors ${selectedStatus === 'vulnerable' ? 'text-amber-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
+                Sắp nguy cấp
+              </span>
+            </div>
+
+            {/* Nguy cấp / Cần bảo tồn */}
+            <div 
+              onClick={() => setSelectedStatus(selectedStatus === 'endangered' ? 'all' : 'endangered')}
+              className="flex items-center gap-2 cursor-pointer group transition-colors"
+              title="Nhấp để lọc điểm Nguy cấp / Cần bảo tồn"
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-[#e11d48] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
+              <span className={`transition-colors ${selectedStatus === 'endangered' ? 'text-rose-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
+                Nguy cấp / Cần bảo tồn
+              </span>
+            </div>
+
+            {/* Điểm mới (chờ duyệt) */}
+            <div 
+              onClick={() => setSelectedStatus(selectedStatus === 'new' ? 'all' : 'new')}
+              className="flex items-center gap-2 cursor-pointer group transition-colors"
+              title="Nhấp để lọc Điểm mới"
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-[#7c3aed] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
+              <span className={`transition-colors ${selectedStatus === 'new' ? 'text-purple-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
+                Điểm mới (chờ duyệt)
+              </span>
+            </div>
+
+            {/* Điểm đã biến mất */}
+            <div 
+              onClick={() => setSelectedStatus(selectedStatus === 'disappeared' ? 'all' : 'disappeared')}
+              className="flex items-center gap-2 cursor-pointer group transition-colors col-span-2 sm:col-span-1"
+              title="Nhấp để lọc Điểm đã biến mất"
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-[#475569] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
+              <span className={`transition-colors ${selectedStatus === 'disappeared' ? 'text-stone-100 font-bold' : 'text-stone-400 group-hover:text-white'}`}>
+                Điểm đã biến mất
+              </span>
+            </div>
           </div>
         </div>
       </div>

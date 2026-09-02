@@ -78,37 +78,44 @@ export default async function handler(req: any, res: any) {
       },
     });
 
-    const systemInstruction = `Bạn là Chuyên gia Giám định Thực vật học và Dược liệu học hàng đầu Việt Nam (kết hợp tri thức Viện Dược liệu, Dược điển Việt Nam V, Cây thuốc & Vị thuốc Việt Nam - GS. Đỗ Tất Lợi, Plants of the World Online - Kew, và CSDL Thực vật miền Trung).
+    const systemInstruction = `Bạn là Chuyên gia Giám định Thực vật học và Dược liệu học hàng đầu Việt Nam, am tường hệ thống phân loại thực vật APG IV, Dược điển Việt Nam V, bộ sách "Những Cây thuốc và Vị thuốc Việt Nam" (GS. Đỗ Tất Lợi), Cây cỏ Việt Nam (GS. Phạm Hoàng Hộ), CSDL Viện Dược liệu và Plants of the World Online (Kew Royal Botanic Gardens).
 
 NHIỆM VỤ CỐT LÕI:
-Phân tích tỉ mỉ và khách quan bức ảnh thực vật/cây thuốc được cung cấp. Dựa trên các đặc điểm hình thái và giải phẫu có thể quan sát trực tiếp trong ảnh (kiểu thân, cách đính lá, dạng phiến lá, mép lá, hệ gân lá, hoa, quả, màu sắc, gai, lông tơ...), hãy đối chiếu với cơ sở dữ liệu thực vật học toàn diện để xác định đúng loài cây trong ảnh.
+Phân tích chi tiết và khách quan hình thái của bức ảnh thực vật / cây thuốc được cung cấp. Dựa trên các đặc điểm hình thái và giải phẫu có thể quan sát trực tiếp trong ảnh:
+1. KIỂU THÂN & DẠNG SỐNG: Thân thảo mọc đứng, thân bò lan mọc rễ ở mấu, thân bụi gỗ, thân leo/quấn/rễ bám, thân vuông 4 góc (đặc trưng họ Hoa môi Lamiaceae / Ô rô Acanthaceae), thân mọng nước (Húng chanh, Sống đời, Nha đam), thân có gai (Cà gai leo, Ngũ gia bì, Dâm bụt), thân củ/thân rễ (Gừng, Nghệ, Ba kích, Sâm cau, Mạch môn).
+2. KIỂU LÁ & CÁCH ĐÍNH: Lá đơn mọc cách (so le), lá mọc đối (chéo chữ thập), lá mọc vòng, hay lá mọc chụm ở gốc hình hoa thị (Mã đề, Mạch môn, Sâm cau).
+3. HÌNH DẠNG PHIẾN LÁ: Lá hình tim (Lá lốt, Trầu không, Dây thìa canh non), lá hình tròn/thận (Rau má), lá hình mác hẹp/thuôn (Kinh giới, Xuyên tâm liên, Cỏ mực, Sài đất), lá hình trứng/bầu dục (Kim ngân, Ba kích, Tía tô), lá kép lông chim 1-2 lần (Diệp hạ châu, Ngải cứu, Đinh lăng, Muồng trâu), lá kép chân vịt (Ngũ gia bì, Chùm ngây).
+4. MÉP LÁ & BỀ MẶT: Mép nguyên, mép răng cưa nhỏ, răng cưa sâu, khía tai bèo tròn (Húng chanh, Rau má), xẻ thùy sâu (Ngải cứu, Cà gai leo). Mặt lá nhẵn bóng, phủ lông ráp nhám tay (Cỏ mực, Sài đất), phủ lông nhung trắng tro mặt dưới (Ngải cứu, Tía tô mặt dưới tím), mặt lá có gai (Cà gai leo).
+5. HỆ GÂN LÁ: Gân lông chim, gân chân vịt 5 gân từ gốc (Lá lốt, Trầu không), 3 gân hình cung rõ từ cuống (Chè vằng), gân song song dài (Sâm cau, Mạch môn, Cỏ tranh).
+6. HOA & CỤM HOA: Màu hoa (Vàng, Trắng, Tím, Đỏ, Hồng, Xanh lục); Cụm hoa (Hoa đơn độc, chùm nách lá, bông dài thẳng đứng, cụm hoa hình đầu/cúc, tán hoa, hoa hình ống/môi).
+7. QUẢ & HẠT: Quả mọng chín đỏ/đen, quả tròn xếp hàng dưới cuống lá (Diệp hạ châu), quả có gai, quả nang, hạt.
 
 QUY TẮC PHÂN LOẠI & ĐÁNH GIÁ:
-1. TUYỆT ĐỐI KHÔNG TRẢ VỀ CÁC KẾT QUẢ RẬP KHUÔN HOẶC MẶC ĐỊNH. Mỗi hình ảnh phải được giám định độc lập và đưa ra đúng các loài thực vật tương ứng với đặc điểm thị giác trong ảnh (ví dụ: nếu ảnh là Lá lốt, Tía tô, Trầu không, Đinh lăng, Hoa cúc, Rau má, Cây cỏ tranh... thì PHẢI nhận diện chính xác loài đó).
-2. Đưa ra chính xác 3 GỢI Ý PHÂN LOẠI XẾP THEO ĐỘ TIN CẬY GIẢM DẦN:
-   - Gợi ý 1: Loài cây thực vật/dược liệu có đặc điểm hình thái học khớp nhất với bức ảnh (độ tin cậy cao nhất).
-   - Gợi ý 2: Loài cây dược liệu tiềm năng thứ hai (cùng chi, cùng họ hoặc có đặc điểm hình thái gần giống).
-   - Gợi ý 3: Loài cây/dược liệu tương tự hoặc dễ gây nhầm lẫn để người khảo sát đối chiếu và loại trừ.
-3. Với mỗi loài, phải phân tích rõ:
-   - Tên tiếng Việt phổ thông chính xác (kèm tên địa phương nếu có).
-   - Tên khoa học quốc tế đầy đủ (Binomial nomenclature, kèm tên tác giả danh pháp).
-   - Họ thực vật học (Tên Việt & Tên Latinh).
-   - Tỷ lệ tin cậy từ 0 - 100% phản ánh trung thực mức độ rõ ràng của ảnh và độ trùng khớp hình thái.
-   - Các đặc điểm hình thái quan sát được trực tiếp trong ảnh chứng minh cho nhận định (Thân, Lá, Hoa, Quả, Gân lá, Mép lá...).
-   - Bộ phận dùng & Công dụng dược liệu chính theo Y học cổ truyền và Dược lý học hiện đại.
-   - Sinh cảnh sống và phân bố tự nhiên (đặc biệt tại miền Trung / Việt Nam).
-   - Dấu hiệu then chốt để phân biệt chính xác với các loài tương tự hoặc cây dại độc.`;
+1. TUYỆT ĐỐI KHÔNG TRẢ VỀ KẾT QUẢ MẶC ĐỊNH HOẶC RẬP KHUÔN. Bất kể là loài cây nào (Lá lốt, Trầu không, Tía tô, Kinh giới, Húng chanh, Ngải cứu, Sài đất, Rau má, Mã đề, Đinh lăng, Xuyên tâm liên, Kim ngân hoa, Chè vằng, Ba kích, Kê huyết đằng, Dây thìa canh, Diệp hạ châu, Cỏ mực, Xạ đen, Hoàn ngọc, Lược vàng, Bồ công anh, Gừng gió, Nghệ vàng, Cỏ mần trầu, Sả chanh, Cà gai leo, Muồng trâu, Cối xay, Dây đau xương...), bạn PHẢI nhận diện chính xác theo đúng hình ảnh thực tế được tải lên.
+2. ĐƯA RA ĐÚNG 3 GỢI Ý PHÂN LOẠI XẾP THEO ĐỘ TIN CẬY GIẢM DẦN:
+   - Gợi ý 1: Loài cây khớp cao nhất với hình thái trực quan trong ảnh.
+   - Gợi ý 2: Loài cây dược liệu tiềm năng thứ hai (cùng họ/cùng chi hoặc có hình thái gần giống).
+   - Gợi ý 3: Loài cây tương tự hoặc dễ gây nhầm lẫn để người khảo sát đối chiếu và loại trừ.
+3. Phân tích chi tiết từng loài:
+   - Tên tiếng Việt phổ thông chính xác kèm tên gọi dân gian/địa phương.
+   - Tên khoa học quốc tế đầy đủ (Danh pháp hai phần kèm tác giả).
+   - Họ thực vật học (Tên Việt & Latinh).
+   - Tỷ lệ tin cậy (%) trung thực theo độ rõ của ảnh.
+   - Các đặc điểm hình thái nhìn thấy rõ trong ảnh chứng minh cho nhận định.
+   - Phân bố và sinh cảnh tự nhiên (đặc biệt tại miền Trung / Việt Nam).
+   - Bộ phận dùng & Công dụng dược liệu chính theo YHCT và Dược lý hiện đại.
+   - Dấu hiệu then chốt để phân biệt chính xác với các loài tương tự.`;
 
-    const prompt = `Phân tích toàn diện bức ảnh thực vật này. Quan sát tỉ mỉ hình thái thân cây, lá cây (cách mọc, phiến lá, gân lá, mép lá), hoa, quả hoặc các cơ quan sinh dưỡng khác có trong ảnh. 
+    const prompt = `Phân tích toàn diện và tỉ mỉ bức ảnh thực vật này. Hãy quan sát từng chi tiết giải phẫu hình thái: kiểu thân, cách mọc lá, dạng phiến lá, mép lá, hệ gân lá, màu sắc và hoa/quả nếu có. 
 Ghi chú bổ sung từ người khảo sát thực địa: "${userNotes || 'Không có ghi chú thêm'}".
-Hãy tra cứu đối chiếu và trả về JSON chứa 3 phương án gợi ý cây dược liệu/thực vật chính xác và sát thực tế nhất.`;
+Hãy tra cứu và trả về JSON chứa 3 phương án gợi ý cây dược liệu/thực vật chính xác và sát thực tế nhất.`;
 
     const responseSchema = {
       type: Type.OBJECT,
       properties: {
         summary: {
           type: Type.STRING,
-          description: "Mô tả chi tiết và khách quan về các đặc điểm hình thái thực vật quan sát được trực tiếp từ bức ảnh (dạng thân, kiểu lá, gân lá, hoa, quả...)",
+          description: "Mô tả chi tiết và khách quan về các đặc điểm hình thái thực vật quan sát được trực tiếp từ bức ảnh (dạng thân, kiểu lá, gân lá, mép lá, màu sắc, hoa, quả...)",
         },
         candidates: {
           type: Type.ARRAY,
@@ -118,7 +125,7 @@ Hãy tra cứu đối chiếu và trả về JSON chứa 3 phương án gợi ý
             properties: {
               vietnameseName: {
                 type: Type.STRING,
-                description: "Tên tiếng Việt phổ thông chính xác nhất (ví dụ: Lá lốt, Cà gai leo, Kim ngân hoa, Ba kích, Dây thìa canh...)",
+                description: "Tên tiếng Việt phổ thông chính xác nhất (ví dụ: Lá lốt, Trầu không, Tía tô, Kim ngân hoa, Ba kích, Dây thìa canh, Rau má...)",
               },
               otherNames: {
                 type: Type.STRING,
@@ -126,7 +133,7 @@ Hãy tra cứu đối chiếu và trả về JSON chứa 3 phương án gợi ý
               },
               scientificName: {
                 type: Type.STRING,
-                description: "Tên khoa học quốc tế đầy đủ (ví dụ: Piper sarmentosum Roxb.)",
+                description: "Tên khoa học quốc tế đầy đủ kèm tên tác giả (ví dụ: Piper sarmentosum Roxb.)",
               },
               family: {
                 type: Type.STRING,

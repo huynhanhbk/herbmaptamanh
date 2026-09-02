@@ -6,7 +6,8 @@ import {
   HABITAT_OPTIONS,
   COMMUNE_VILLAGES,
   getHabitatLabel,
-  getConservationStatusLabel
+  getConservationStatusLabel,
+  getPlantSurveyStatus
 } from '../types';
 import { 
   Search, 
@@ -49,16 +50,36 @@ export const CatalogList: React.FC<CatalogListProps> = ({
   const [selectedHabitat, setSelectedHabitat] = useState<'all' | HabitatCategory>('all');
   const [selectedConservation, setSelectedConservation] = useState<'all' | ConservationLevel>('all');
   const [selectedCommune, setSelectedCommune] = useState<string>('all');
+  const [selectedOccurrence, setSelectedOccurrence] = useState<'all' | 'present' | 'degraded' | 'disappeared'>('all');
+
+  // Counts for occurrence status
+  const occurrenceCounts = useMemo(() => {
+    return {
+      all: plants.length,
+      present: plants.filter((p) => (!p.occurrenceStatus || p.occurrenceStatus === 'present') && !p.isDisappeared).length,
+      degraded: plants.filter((p) => p.occurrenceStatus === 'degraded' && !p.isDisappeared).length,
+      disappeared: plants.filter((p) => p.occurrenceStatus === 'disappeared' || p.isDisappeared).length,
+    };
+  }, [plants]);
 
   // Filtered plants
   const filteredPlants = useMemo(() => {
     return plants.filter((plant) => {
+      const isDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
+      const isDegraded = !isDisappeared && plant.occurrenceStatus === 'degraded';
+      const isPresent = !isDisappeared && !isDegraded;
+
       // Smart exact & approximate search query filter
       if (searchQuery.trim()) {
         if (!matchPlantSearch(plant, searchQuery)) {
           return false;
         }
       }
+
+      // Occurrence status filter
+      if (selectedOccurrence === 'present' && !isPresent) return false;
+      if (selectedOccurrence === 'degraded' && !isDegraded) return false;
+      if (selectedOccurrence === 'disappeared' && !isDisappeared) return false;
 
       // Habitat filter
       if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) {
@@ -77,7 +98,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
 
       return true;
     });
-  }, [plants, searchQuery, selectedHabitat, selectedConservation, selectedCommune]);
+  }, [plants, searchQuery, selectedOccurrence, selectedHabitat, selectedConservation, selectedCommune]);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
@@ -139,6 +160,64 @@ export const CatalogList: React.FC<CatalogListProps> = ({
               <X className="w-4 h-4" />
             </button>
           )}
+        </div>
+
+        {/* Primary Occurrence Status Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs border-b border-stone-100 pb-2">
+          <span className="text-stone-400 font-semibold text-[11px] shrink-0 mr-1">Hiện trạng:</span>
+          <button
+            onClick={() => setSelectedOccurrence('all')}
+            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              selectedOccurrence === 'all'
+                ? 'bg-stone-900 text-white font-bold shadow-xs'
+                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
+            }`}
+          >
+            <span>Tất cả</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-stone-800/40 text-stone-200 font-mono">
+              {occurrenceCounts.all}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedOccurrence('present')}
+            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+              selectedOccurrence === 'present'
+                ? 'bg-emerald-700 text-white font-bold shadow-xs'
+                : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
+            }`}
+          >
+            <span>🟢 Đang tồn tại</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-900/40 text-emerald-100 font-mono">
+              {occurrenceCounts.present}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedOccurrence('degraded')}
+            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+              selectedOccurrence === 'degraded'
+                ? 'bg-amber-600 text-white font-bold shadow-xs'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-900'
+            }`}
+          >
+            <span>🟡 Bị suy thoái</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-900/40 text-amber-100 font-mono">
+              {occurrenceCounts.degraded}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedOccurrence('disappeared')}
+            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+              selectedOccurrence === 'disappeared'
+                ? 'bg-rose-800 text-white font-bold shadow-xs'
+                : 'bg-rose-50 hover:bg-rose-100 text-rose-900'
+            }`}
+            title="Lưu trữ các điểm khảo sát trong lịch sử nay cây đã mất hoặc cần trồng lại"
+          >
+            <span>⚫ Điểm đã mất</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-950/50 text-rose-200 font-mono">
+              {occurrenceCounts.disappeared}
+            </span>
+          </button>
         </div>
 
         {/* Habitat Category Filters (06 categories) */}
@@ -254,13 +333,23 @@ export const CatalogList: React.FC<CatalogListProps> = ({
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredPlants.map((plant) => {
-            const isEndangered = plant.conservationLevel === 'endangered';
-            const isVulnerable = plant.conservationLevel === 'vulnerable' || plant.conservationLevel === 'rare';
+            const statusMeta = getPlantSurveyStatus(plant);
+            const isPlantDisappeared = statusMeta.key === 'disappeared';
 
             return (
               <div
                 key={plant.id}
-                className="bg-white rounded-3xl overflow-hidden border border-stone-200/90 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1"
+                className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1 ${
+                  isPlantDisappeared 
+                    ? 'border-stone-300 bg-stone-50/70 opacity-90' 
+                    : statusMeta.key === 'vulnerable'
+                    ? 'border-amber-300' 
+                    : statusMeta.key === 'endangered'
+                    ? 'border-rose-300'
+                    : statusMeta.key === 'new'
+                    ? 'border-purple-300'
+                    : 'border-stone-200/90'
+                }`}
               >
                 {/* Photo & badges */}
                 <div 
@@ -270,7 +359,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                   <img
                     src={plant.coverImage}
                     alt={plant.vietnameseName}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ${
+                      isPlantDisappeared ? 'grayscale opacity-75' : ''
+                    }`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
 
@@ -279,28 +370,16 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                     <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded-lg bg-black/70 text-white backdrop-blur-xs">
                       {plant.id}
                     </span>
-                    {plant.status === 'pending' && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-purple-600 text-white">
-                        Chờ duyệt
-                      </span>
-                    )}
-                    {(plant.isDisappeared || plant.occurrenceStatus === 'disappeared') && (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-600 text-white shadow-sm flex items-center gap-1">
-                        ⚠️ Đã biến mất
-                      </span>
-                    )}
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-lg text-white shadow-sm flex items-center gap-1 ${statusMeta.bgClass}`}>
+                      <span>{statusMeta.emoji}</span>
+                      <span>{statusMeta.label}</span>
+                    </span>
                   </div>
 
-                  {/* Conservation status badge */}
+                  {/* Habitat badge */}
                   <div className="absolute bottom-2.5 right-2.5">
-                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm backdrop-blur-xs ${
-                      isEndangered
-                        ? 'bg-rose-600 text-white'
-                        : isVulnerable
-                        ? 'bg-amber-500 text-stone-900'
-                        : 'bg-emerald-700 text-white'
-                    }`}>
-                      {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
+                    <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full shadow-sm bg-black/60 text-white backdrop-blur-xs">
+                      {getHabitatLabel(plant.habitatCategory)}
                     </span>
                   </div>
                 </div>
@@ -310,7 +389,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                   <div>
                     {/* Plant title */}
                     <div className="cursor-pointer" onClick={() => onSelectPlant(plant)}>
-                      <h3 className="font-bold text-base text-stone-900 group-hover:text-emerald-800 transition-colors leading-tight">
+                      <h3 className={`font-bold text-base transition-colors leading-tight ${
+                        isPlantDisappeared ? 'text-stone-600 line-through' : 'text-stone-900 group-hover:text-emerald-800'
+                      }`}>
                         {plant.vietnameseName}
                       </h3>
                       <p className="text-xs text-stone-500 italic font-serif mt-0.5">
@@ -318,12 +399,27 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                       </p>
                     </div>
 
-                    <p className="text-xs text-stone-600 line-clamp-2 mt-2 leading-relaxed font-normal">
-                      {plant.shortDescription}
-                    </p>
+                    {isPlantDisappeared ? (
+                      <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 space-y-1">
+                        <p className="font-semibold flex items-center gap-1">
+                          <span>⚠️ Điểm thuốc đã mất khỏi thực địa</span>
+                        </p>
+                        <p className="text-[10.5px] text-rose-700 leading-snug">
+                          Dữ liệu đã được lưu trữ trong danh mục Điểm đã mất. Có thể phục hồi khi trồng lại cây mới tại vị trí này.
+                        </p>
+                      </div>
+                    ) : statusMeta.key === 'vulnerable' ? (
+                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center gap-1.5">
+                        <span>⚠️ <b>Hiện trạng:</b> Quần thể sắp nguy cấp / bị suy thoái số lượng.</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-stone-600 line-clamp-2 mt-2 leading-relaxed font-normal">
+                        {plant.shortDescription}
+                      </p>
+                    )}
 
                     {/* Folk remedies highlight snippet */}
-                    <div className="mt-3 bg-amber-50/70 p-2 rounded-xl border border-amber-200/60 text-[11px] text-amber-900 flex items-start gap-1.5">
+                    <div className="mt-2.5 bg-amber-50/70 p-2 rounded-xl border border-amber-200/60 text-[11px] text-amber-900 flex items-start gap-1.5">
                       <HeartHandshake className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
                       <span className="line-clamp-1">
                         <b>Dân gian:</b> {plant.traditionalUses.folkRemedies[0] || 'Kinh nghiệm lưu truyền'}
@@ -349,10 +445,22 @@ export const CatalogList: React.FC<CatalogListProps> = ({
 
                       <button
                         onClick={() => onSelectPlant(plant)}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-[11px] flex items-center gap-1 transition-colors shadow-2xs"
+                        className={`px-3 py-1.5 rounded-xl font-semibold text-[11px] flex items-center gap-1 transition-colors shadow-2xs ${
+                          isPlantDisappeared
+                            ? 'bg-rose-700 hover:bg-rose-800 text-white'
+                            : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                        }`}
                       >
-                        <QrCode className="w-3 h-3" />
-                        <span>Hồ sơ & QR</span>
+                        {isPlantDisappeared ? (
+                          <>
+                            <span>🌱 Phục hồi / Chi tiết</span>
+                          </>
+                        ) : (
+                          <>
+                            <QrCode className="w-3 h-3" />
+                            <span>Hồ sơ & QR</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

@@ -7,6 +7,7 @@ import {
   ConservationLevel,
   CommuneVillage,
   COMMUNE_VILLAGES,
+  PlantOccurrenceStatus,
   PlantMonitoringLog,
   LocationData,
   getHabitatLabel,
@@ -112,14 +113,27 @@ function migratePlantRecord(p: any): MedicinalPlant {
         statusNote: `Ghi nhận khảo sát ban đầu: Cây hiện diện và sinh trưởng tại sinh cảnh ${p.habitat || 'thực địa Tam Anh'}.`,
         surveyor: p.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
         createdAt: p.createdAt || new Date().toISOString(),
+        approvalStatus: 'approved',
+        submittedByRole: 'admin',
+        reviewedBy: p.dataSource?.verifiedBy || 'Ban Quản trị',
       }
     ];
+  } else {
+    // Ensure all legacy logs have approvalStatus
+    monitoringLogs = monitoringLogs.map(log => ({
+      ...log,
+      approvalStatus: log.approvalStatus || 'approved',
+      submittedByRole: log.submittedByRole || 'admin',
+    }));
   }
 
-  // Determine current occurrence status from latest monitoring log
-  const sortedLogs = [...monitoringLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const latestLog = sortedLogs[0];
-  const occurrenceStatus = latestLog ? latestLog.status : (p.occurrenceStatus || 'present');
+  // Determine current occurrence status strictly from latest APPROVED monitoring log
+  const approvedLogs = monitoringLogs.filter(
+    (l) => !l.approvalStatus || l.approvalStatus === 'approved'
+  );
+  const sortedApprovedLogs = [...approvedLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const latestApprovedLog = sortedApprovedLogs[0];
+  const occurrenceStatus = latestApprovedLog ? latestApprovedLog.status : (p.occurrenceStatus || 'present');
   const isDisappeared = occurrenceStatus === 'disappeared';
 
   return {
@@ -518,14 +532,71 @@ export function updatePlantStatus(id: string, status: 'verified' | 'pending'): M
   return getStoredPlants();
 }
 
-export function saveUpdatedPlant(id: string, updates: Partial<MedicinalPlant>): MedicinalPlant[] {
-  updatePlant(id, updates);
+export function saveUpdatedPlant(
+  idOrPlant: string | MedicinalPlant,
+  updates?: Partial<MedicinalPlant>
+): MedicinalPlant[] {
+  if (typeof idOrPlant === 'string') {
+    updatePlant(idOrPlant, updates || {});
+  } else {
+    updatePlant(idOrPlant.id, idOrPlant);
+  }
   return getStoredPlants();
+}
+
+export function deletePlant(id: string): MedicinalPlant[] {
+  const currentPlants = getStoredPlants();
+  const filtered = currentPlants.filter((p) => p.id !== id);
+  if (filtered.length !== currentPlants.length) {
+    savePlants(filtered);
+    deletePlantFromFirestore(id);
+  }
+  return getStoredPlants();
+}
+
+export function resolvePlantOccurrenceStatus(
+  logs?: PlantMonitoringLog[],
+  fallbackOccurrence: PlantOccurrenceStatus = 'present',
+  fallbackDisappeared: boolean = false
+): { occurrenceStatus: PlantOccurrenceStatus; isDisappeared: boolean; latestApprovedLog?: PlantMonitoringLog } {
+  const existingLogs = Array.isArray(logs) ? [...logs] : [];
+  const approvedLogs = existingLogs.filter(
+    (l) => !l.approvalStatus || l.approvalStatus === 'approved'
+  );
+
+  if (approvedLogs.length === 0) {
+    const isDisappeared = fallbackDisappeared || fallbackOccurrence === 'disappeared';
+    return {
+      occurrenceStatus: isDisappeared ? 'disappeared' : fallbackOccurrence,
+      isDisappeared,
+    };
+  }
+
+  // Sort approved logs by date DESC, then createdAt DESC
+  approvedLogs.sort((a, b) => {
+    const timeA = new Date(a.date).getTime();
+    const timeB = new Date(b.date).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    const createA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const createB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return createB - createA;
+  });
+
+  const latestApprovedLog = approvedLogs[0];
+  const occurrenceStatus: PlantOccurrenceStatus = latestApprovedLog.status;
+  const isDisappeared = occurrenceStatus === 'disappeared';
+
+  return {
+    occurrenceStatus,
+    isDisappeared,
+    latestApprovedLog,
+  };
 }
 
 export function addPlantMonitoringLog(
   plantId: string,
-  logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>
+  logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>,
+  isAdmin: boolean = false
 ): MedicinalPlant[] {
   const currentPlants = getStoredPlants();
   const index = currentPlants.findIndex((p) => p.id === plantId);
@@ -534,23 +605,28 @@ export function addPlantMonitoringLog(
   const plant = currentPlants[index];
   const now = new Date().toISOString();
   const newLog: PlantMonitoringLog = {
-    id: `log-${Date.now()}`,
+    id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     date: logData.date,
     status: logData.status,
     statusNote: logData.statusNote,
     surveyor: logData.surveyor,
+    contactPhone: logData.contactPhone,
     evidencePhoto: logData.evidencePhoto,
     createdAt: now,
+    approvalStatus: isAdmin ? 'approved' : 'pending',
+    submittedByRole: isAdmin ? 'admin' : 'public',
+    reviewedBy: isAdmin ? 'Ban Quản trị (Admin)' : undefined,
+    reviewedAt: isAdmin ? now : undefined,
   };
 
   const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
   const updatedLogs = [newLog, ...existingLogs];
 
-  // Sort logs descending by date
-  updatedLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const latestLog = updatedLogs[0];
-  const occurrenceStatus = latestLog ? latestLog.status : 'present';
-  const isDisappeared = occurrenceStatus === 'disappeared';
+  const { occurrenceStatus, isDisappeared } = resolvePlantOccurrenceStatus(
+    updatedLogs,
+    plant.occurrenceStatus,
+    plant.isDisappeared
+  );
 
   const updatedPlant: MedicinalPlant = {
     ...plant,
@@ -564,6 +640,155 @@ export function addPlantMonitoringLog(
   savePlants(currentPlants);
   savePlantToFirestore(updatedPlant);
   return getStoredPlants();
+}
+
+export function approvePlantMonitoringLog(
+  plantId: string,
+  logId: string,
+  reviewerName: string = 'Ban Quản trị (Admin)'
+): MedicinalPlant[] {
+  const currentPlants = getStoredPlants();
+  const index = currentPlants.findIndex((p) => p.id === plantId);
+  if (index === -1) return currentPlants;
+
+  const plant = currentPlants[index];
+  const now = new Date().toISOString();
+  const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
+  
+  const updatedLogs = existingLogs.map((log) => {
+    if (log.id === logId) {
+      return {
+        ...log,
+        approvalStatus: 'approved' as const,
+        reviewedBy: reviewerName,
+        reviewedAt: now,
+      };
+    }
+    return log;
+  });
+
+  const { occurrenceStatus, isDisappeared } = resolvePlantOccurrenceStatus(
+    updatedLogs,
+    plant.occurrenceStatus,
+    plant.isDisappeared
+  );
+
+  const updatedPlant: MedicinalPlant = {
+    ...plant,
+    occurrenceStatus,
+    isDisappeared,
+    monitoringLogs: updatedLogs,
+    updatedAt: now,
+  };
+
+  currentPlants[index] = updatedPlant;
+  savePlants(currentPlants);
+  savePlantToFirestore(updatedPlant);
+  return getStoredPlants();
+}
+
+export function rejectPlantMonitoringLog(
+  plantId: string,
+  logId: string,
+  rejectionReason?: string
+): MedicinalPlant[] {
+  const currentPlants = getStoredPlants();
+  const index = currentPlants.findIndex((p) => p.id === plantId);
+  if (index === -1) return currentPlants;
+
+  const plant = currentPlants[index];
+  const now = new Date().toISOString();
+  const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
+
+  const updatedLogs = existingLogs.map((log) => {
+    if (log.id === logId) {
+      return {
+        ...log,
+        approvalStatus: 'rejected' as const,
+        rejectionReason: rejectionReason || 'Không đủ căn cứ hoặc hình ảnh không khớp thực địa',
+        reviewedAt: now,
+      };
+    }
+    return log;
+  });
+
+  const { occurrenceStatus, isDisappeared } = resolvePlantOccurrenceStatus(
+    updatedLogs,
+    plant.occurrenceStatus,
+    plant.isDisappeared
+  );
+
+  const updatedPlant: MedicinalPlant = {
+    ...plant,
+    occurrenceStatus,
+    isDisappeared,
+    monitoringLogs: updatedLogs,
+    updatedAt: now,
+  };
+
+  currentPlants[index] = updatedPlant;
+  savePlants(currentPlants);
+  savePlantToFirestore(updatedPlant);
+  return getStoredPlants();
+}
+
+export function deletePlantMonitoringLog(
+  plantId: string,
+  logId: string
+): MedicinalPlant[] {
+  const currentPlants = getStoredPlants();
+  const index = currentPlants.findIndex((p) => p.id === plantId);
+  if (index === -1) return currentPlants;
+
+  const plant = currentPlants[index];
+  const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
+  const updatedLogs = existingLogs.filter((log) => log.id !== logId);
+
+  const { occurrenceStatus, isDisappeared } = resolvePlantOccurrenceStatus(
+    updatedLogs,
+    'present',
+    false
+  );
+
+  const updatedPlant: MedicinalPlant = {
+    ...plant,
+    occurrenceStatus,
+    isDisappeared,
+    monitoringLogs: updatedLogs,
+    updatedAt: new Date().toISOString(),
+  };
+
+  currentPlants[index] = updatedPlant;
+  savePlants(currentPlants);
+  savePlantToFirestore(updatedPlant);
+  return getStoredPlants();
+}
+
+export interface PendingMonitoringLogItem {
+  plantId: string;
+  plantName: string;
+  plantScientificName: string;
+  plant: MedicinalPlant;
+  log: PlantMonitoringLog;
+}
+
+export function getAllPendingMonitoringLogs(plantsList?: MedicinalPlant[]): PendingMonitoringLogItem[] {
+  const plants = plantsList || getStoredPlants();
+  const list: PendingMonitoringLogItem[] = [];
+  plants.forEach((plant) => {
+    (plant.monitoringLogs || []).forEach((log) => {
+      if (log.approvalStatus === 'pending') {
+        list.push({
+          plantId: plant.id,
+          plantName: plant.vietnameseName,
+          plantScientificName: plant.scientificName,
+          plant,
+          log,
+        });
+      }
+    });
+  });
+  return list.sort((a, b) => new Date(b.log.createdAt).getTime() - new Date(a.log.createdAt).getTime());
 }
 
 export function updatePlant(id: string, updates: Partial<MedicinalPlant>): MedicinalPlant | null {
@@ -583,17 +808,6 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
   return updatedPlant;
 }
 
-export function deletePlant(id: string): boolean {
-  const currentPlants = getStoredPlants();
-  const filtered = currentPlants.filter((p) => p.id !== id);
-  if (filtered.length !== currentPlants.length) {
-    savePlants(filtered);
-    deletePlantFromFirestore(id);
-    return true;
-  }
-  return false;
-}
-
 export function resetToDefaultData(): MedicinalPlant[] {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PLANTS_DATA));
   batchSavePlantsToFirestore(INITIAL_PLANTS_DATA);
@@ -609,13 +823,20 @@ export function verifyAdminPasscode(inputCode: string): boolean {
   return inputCode.trim() === saved || inputCode.trim() === DEFAULT_PASSCODE;
 }
 
-export function exportPlantsAsJSON(): string {
-  const plants = getStoredPlants();
-  return JSON.stringify(plants, null, 2);
+export function exportPlantsAsJSON(plantsList?: MedicinalPlant[]): void {
+  const plants = plantsList || getStoredPlants();
+  const jsonStr = JSON.stringify(plants, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tam_anh_medicinal_plants_${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
-export function exportPlantsAsCSV(): string {
-  const plants = getStoredPlants();
+export function exportPlantsAsCSV(plantsList?: MedicinalPlant[]): void {
+  const plants = plantsList || getStoredPlants();
   const headers = [
     'Mã định danh (ID)',
     'Tên cây thuốc',
@@ -654,7 +875,14 @@ export function exportPlantsAsCSV(): string {
     `"${(p.coverImage || '').replace(/"/g, '""')}"`,
   ]);
 
-  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `tam_anh_cay_thuoc_bang_tinh_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ----------------------------------------------------
