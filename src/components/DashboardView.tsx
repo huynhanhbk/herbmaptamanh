@@ -126,14 +126,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               Báo Cáo Không Gian Cây Thuốc & Cảnh Báo Bảo Tồn
             </h1>
             <p className="text-xs sm:text-sm text-stone-300 max-w-2xl mt-1 leading-relaxed">
-              Tổng hợp dữ liệu điều tra thực địa, phân bố sinh cảnh, mật độ tần suất và đánh giá nguy cơ suy giảm nguồn gen dược liệu bản địa tại xã Tam Anh.
+              Tổng hợp dữ liệu điều tra thực địa, phân bố sinh cảnh, mật độ tần suất và đánh giá nguy cơ suy giảm nguồn dược liệu bản địa tại xã Tam Anh.
             </p>
-          </div>
-
-          <div className="bg-stone-800/90 border border-stone-700/80 p-3.5 rounded-2xl text-center shrink-0">
-            <span className="text-[11px] uppercase font-bold text-stone-400 block">Tỷ lệ số hóa</span>
-            <span className="text-2xl font-extrabold text-emerald-400">100%</span>
-            <span className="text-[10px] text-stone-400 block mt-0.5">Gắn định vị GPS & QR</span>
           </div>
         </div>
       </div>
@@ -187,7 +181,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <span className="text-xs font-semibold text-stone-500 block">Điểm khảo sát GPS</span>
             <span className="text-xl sm:text-2xl font-bold text-teal-800">{totalPlants}</span>
             <span className="text-[11px] text-teal-600 font-medium block">
-              Tại Tam Anh Bắc & Nam
+              Tại Tam Anh
             </span>
           </div>
         </div>
