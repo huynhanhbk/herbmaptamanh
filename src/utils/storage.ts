@@ -91,14 +91,22 @@ function migratePlantRecord(p: any): MedicinalPlant {
   }
 
   // Conservation status normalization: ensure no legacy "Ít quan tâm" remains
-  const conservationStatus: UnifiedConservationStatus = getConservationStatusLabel(p.conservationStatus || p.conservationLevel);
+  let conservationStatus: UnifiedConservationStatus = getConservationStatusLabel(p.conservationStatus || p.conservationLevel);
   let conservationLevel: ConservationLevel = 'safe';
+  let occurrenceStatus: PlantOccurrenceStatus = p.occurrenceStatus || 'present';
+
   if (conservationStatus === 'Nguy cấp / Cần bảo tồn') {
     conservationLevel = 'endangered';
+    if (occurrenceStatus === 'degraded') occurrenceStatus = 'present';
   } else if (conservationStatus === 'Sắp nguy cấp') {
     conservationLevel = 'vulnerable';
+    occurrenceStatus = 'degraded';
+  } else if (conservationStatus === 'Đã biến mất') {
+    conservationLevel = 'safe';
+    occurrenceStatus = 'disappeared';
   } else {
     conservationLevel = 'safe';
+    if (occurrenceStatus === 'degraded') occurrenceStatus = 'present';
   }
 
   // Monitoring logs normalization & occurrence status derivation
@@ -109,7 +117,8 @@ function migratePlantRecord(p: any): MedicinalPlant {
       {
         id: `log-init-${p.id || '1'}`,
         date: initialDate,
-        status: 'present',
+        status: occurrenceStatus,
+        conservationStatus: conservationStatus,
         statusNote: `Ghi nhận khảo sát ban đầu: Cây hiện diện và sinh trưởng tại sinh cảnh ${p.habitat || 'thực địa Tam Anh'}.`,
         surveyor: p.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
         createdAt: p.createdAt || new Date().toISOString(),
@@ -127,14 +136,34 @@ function migratePlantRecord(p: any): MedicinalPlant {
     }));
   }
 
-  // Determine current occurrence status strictly from latest APPROVED monitoring log
+  // Determine current occurrence & conservation status strictly from latest APPROVED monitoring log
   const approvedLogs = monitoringLogs.filter(
     (l) => !l.approvalStatus || l.approvalStatus === 'approved'
   );
   const sortedApprovedLogs = [...approvedLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestApprovedLog = sortedApprovedLogs[0];
-  const occurrenceStatus = latestApprovedLog ? latestApprovedLog.status : (p.occurrenceStatus || 'present');
-  const isDisappeared = occurrenceStatus === 'disappeared';
+  if (latestApprovedLog) {
+    occurrenceStatus = latestApprovedLog.status;
+    if (latestApprovedLog.status === 'disappeared') {
+      conservationStatus = 'Đã biến mất';
+      conservationLevel = 'safe';
+    } else if (latestApprovedLog.status === 'degraded') {
+      conservationStatus = 'Sắp nguy cấp';
+      conservationLevel = 'vulnerable';
+    } else if (latestApprovedLog.conservationStatus) {
+      conservationStatus = latestApprovedLog.conservationStatus;
+      if (conservationStatus === 'Nguy cấp / Cần bảo tồn') {
+        conservationLevel = 'endangered';
+      } else if (conservationStatus === 'Sắp nguy cấp') {
+        conservationLevel = 'vulnerable';
+      } else if (conservationStatus === 'Đã biến mất') {
+        conservationLevel = 'safe';
+      } else {
+        conservationLevel = 'safe';
+      }
+    }
+  }
+  const isDisappeared = conservationStatus === 'Đã biến mất' || occurrenceStatus === 'disappeared' || !!p.isDisappeared;
 
   return {
     ...p,
@@ -866,10 +895,10 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
     reqConservationStatus = getConservationStatusLabel(updates.conservationStatus, updates.isDisappeared, updates.occurrenceStatus);
   } else if (updates.isDisappeared || updates.occurrenceStatus === 'disappeared') {
     reqConservationStatus = 'Đã biến mất';
-  } else if (updates.conservationLevel === 'endangered') {
-    reqConservationStatus = 'Nguy cấp / Cần bảo tồn';
   } else if (updates.conservationLevel === 'vulnerable' || updates.occurrenceStatus === 'degraded') {
     reqConservationStatus = 'Sắp nguy cấp';
+  } else if (updates.conservationLevel === 'endangered') {
+    reqConservationStatus = 'Nguy cấp / Cần bảo tồn';
   } else {
     reqConservationStatus = getConservationStatusLabel(current.conservationStatus, current.isDisappeared, current.occurrenceStatus);
   }
@@ -883,6 +912,14 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
   let conservationLevel: ConservationLevel = 
     reqConservationStatus === 'Nguy cấp / Cần bảo tồn' ? 'endangered' :
     reqConservationStatus === 'Sắp nguy cấp' ? 'vulnerable' : 'safe';
+
+  // Ensure occurrenceStatus is aligned with conservation status
+  if (reqConservationStatus === 'Sắp nguy cấp' && occurrenceStatus !== 'disappeared') {
+    occurrenceStatus = 'degraded';
+    conservationLevel = 'vulnerable';
+  } else if (reqConservationStatus === 'Nguy cấp / Cần bảo tồn') {
+    conservationLevel = 'endangered';
+  }
 
   // Synchronize coverImage and photos gallery
   const newCoverImage = updates.coverImage !== undefined ? updates.coverImage : current.coverImage;

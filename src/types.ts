@@ -207,18 +207,19 @@ export function getPlantSurveyStatus(plant: {
   if (plant.status === 'pending') {
     return SURVEY_POINT_STATUS_CONFIG.new;
   }
+  // Check vulnerable / Sắp nguy cấp first to avoid overlapping with endangered keywords
   if (
-    plant.conservationLevel === 'endangered' || 
-    plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
-  ) {
-    return SURVEY_POINT_STATUS_CONFIG.endangered;
-  }
-  if (
-    plant.conservationLevel === 'vulnerable' || 
     plant.conservationStatus === 'Sắp nguy cấp' ||
+    plant.conservationLevel === 'vulnerable' || 
     plant.occurrenceStatus === 'degraded'
   ) {
     return SURVEY_POINT_STATUS_CONFIG.vulnerable;
+  }
+  if (
+    plant.conservationStatus === 'Nguy cấp / Cần bảo tồn' ||
+    plant.conservationLevel === 'endangered'
+  ) {
+    return SURVEY_POINT_STATUS_CONFIG.endangered;
   }
   return SURVEY_POINT_STATUS_CONFIG.safe;
 }
@@ -248,14 +249,33 @@ export function getConservationStatusLabel(
   if (isDisappeared || occurrenceStatus === 'disappeared') return 'Đã biến mất';
   if (!statusOrLevel) return 'An toàn';
   const str = String(statusOrLevel).trim().toLowerCase();
-  if (str.includes('biến mất') || str.includes('disappeared') || str.includes('đã mất')) {
+  if (str.includes('biến mất') || str.includes('disappeared') || str.includes('đã mất') || str.includes('bien mat')) {
     return 'Đã biến mất';
   }
-  if (str.includes('nguy cấp') || str.includes('cần bảo tồn') || str.includes('đỏ') || str.includes('endangered')) {
-    return 'Nguy cấp / Cần bảo tồn';
-  }
-  if (str.includes('sắp nguy cấp') || str.includes('vulnerable') || str.includes('suy thoái') || str.includes('degraded') || str.includes('hiếm')) {
+  // IMPORTANT: Must check 'sắp nguy cấp' / 'vulnerable' / 'suy thoái' BEFORE 'nguy cấp' because 'sắp nguy cấp' contains 'nguy cấp'!
+  if (
+    str.includes('sắp nguy cấp') || 
+    str.includes('sap nguy cap') || 
+    str.includes('vulnerable') || 
+    str.includes('suy thoái') || 
+    str.includes('suy thoai') || 
+    str.includes('degraded') || 
+    str === 'vu'
+  ) {
     return 'Sắp nguy cấp';
+  }
+  if (
+    str.includes('nguy cấp') || 
+    str.includes('nguy cap') || 
+    str.includes('cần bảo tồn') || 
+    str.includes('can bao ton') || 
+    str.includes('sách đỏ') || 
+    str.includes('sach do') || 
+    str.includes('endangered') || 
+    str === 'en' || 
+    str === 'cr'
+  ) {
+    return 'Nguy cấp / Cần bảo tồn';
   }
   return 'An toàn';
 }

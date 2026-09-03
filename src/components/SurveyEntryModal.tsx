@@ -75,11 +75,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   );
   const [shortDescription, setShortDescription] = useState('');
   
-  // Botanical traits
+  // Botanical traits (4 Unified Fields)
   const [growthForm, setGrowthForm] = useState('');
   const [leavesTrait, setLeavesTrait] = useState('');
-  const [flowersTrait, setFlowersTrait] = useState('');
-  const [fruitsTrait, setFruitsTrait] = useState('');
+  const [flowersAndFruitsTrait, setFlowersAndFruitsTrait] = useState('');
   const [rootsTrait, setRootsTrait] = useState('');
 
   // Location & Habitat (The key survey variables)
@@ -110,14 +109,14 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
 
   // Folk remedies & Informant
   const [folkRemediesText, setFolkRemediesText] = useState('');
-  const [partUsedText, setPartUsedText] = useState('Thân cành và lá');
-  const [preparationText, setPreparationText] = useState('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
-  const [informantName, setInformantName] = useState('Người dân am hiểu cây thuốc bản địa Tam Anh');
-  const [informantRole, setInformantRole] = useState('Thôn Đức Bố');
+  const [partUsedText, setPartUsedText] = useState('');
+  const [preparationText, setPreparationText] = useState('');
+  const [informantName, setInformantName] = useState('Người dân am hiểu cây thuốc bản địa');
+  const [informantRole, setInformantRole] = useState('');
   const [hasConsent, setHasConsent] = useState(true);
 
   // Surveyor info
-  const [surveyor, setSurveyor] = useState('Nhóm nghiên cứu KHKT Trường THCS Tam Anh');
+  const [surveyor, setSurveyor] = useState('Nhóm nghiên cứu KHKT Trường THCS Nguyễn Khuyến');
   const [surveyTitle, setSurveyTitle] = useState('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
 
   // Ref to track if modal reopened due to map coordinate picking
@@ -152,8 +151,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setShortDescription(plant.shortDescription);
     setGrowthForm(plant.identificationTraits?.growthForm || '');
     setLeavesTrait(plant.identificationTraits?.leaves || '');
-    setFlowersTrait(plant.identificationTraits?.flowers || '');
-    setFruitsTrait(plant.identificationTraits?.fruits || '');
+    const flw = plant.identificationTraits?.flowers || '';
+    const frt = plant.identificationTraits?.fruits || '';
+    setFlowersAndFruitsTrait(flw ? (frt && !flw.includes(frt) ? `${flw} — ${frt}` : flw) : frt);
     setRootsTrait(plant.identificationTraits?.roots || '');
     setHabitat(plant.habitat);
     setHabitatCategory(plant.habitatCategory);
@@ -178,13 +178,13 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setHabitat('Bờ rào & nương đồi ven làng');
     setHabitatCategory('garden');
     setCommuneSection('Thôn Đức Bố');
-    setAddressDescription('Thôn Đức Bố, xã Tam Anh');
+    setAddressDescription('');
     setLat(15.4635);
     setLng(108.6185);
-    setInformantName('Người dân am hiểu cây thuốc bản địa Tam Anh');
-    setInformantRole('Thôn Đức Bố');
+    setInformantName('Người dân am hiểu cây thuốc bản địa');
+    setInformantRole('');
     setHasConsent(true);
-    setSurveyor('Nhóm nghiên cứu KHKT Trường THCS Tam Anh');
+    setSurveyor('Nhóm nghiên cứu KHKT Trường THCS Nguyễn Khuyến');
     setSurveyTitle('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
 
     if (targetMode === 'existing_species' && uniqueSpeciesList.length > 0) {
@@ -200,8 +200,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       setShortDescription('');
       setGrowthForm('');
       setLeavesTrait('');
-      setFlowersTrait('');
-      setFruitsTrait('');
+      setFlowersAndFruitsTrait('');
       setRootsTrait('');
       setConservationStatus('An toàn');
       setConservationLevel('safe');
@@ -259,8 +258,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         setShortDescription(prefillData.candidate.observedFeatures?.join(', ') || '');
         setGrowthForm('');
         setLeavesTrait(prefillData.candidate.observedFeatures?.join(', ') || '');
-        setFlowersTrait('');
-        setFruitsTrait('');
+        setFlowersAndFruitsTrait('');
         setRootsTrait('');
         setFolkRemediesText(prefillData.candidate.folkUseSummary || '');
         setPartUsedText('Thân cành và lá');
@@ -364,12 +362,11 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setShortDescription('');
     setGrowthForm('');
     setLeavesTrait('');
-    setFlowersTrait('');
-    setFruitsTrait('');
+    setFlowersAndFruitsTrait('');
     setRootsTrait('');
     setFolkRemediesText('');
-    setPartUsedText('Thân cành và lá');
-    setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
+    setPartUsedText('');
+    setPreparationText('');
     setValidationError(null);
   };
 
@@ -438,12 +435,12 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         },
       ],
       shortDescription: shortDescription.trim() || (basePlant ? basePlant.shortDescription : `Cây thuốc ghi nhận tại ${addressDescription}, xã Tam Anh.`),
-      identificationTraits: basePlant?.identificationTraits || {
-        growthForm: growthForm || 'Cây thảo / cây bụi tự nhiên.',
-        leaves: leavesTrait || 'Đang cập nhật tiêu bản lá.',
-        flowers: flowersTrait || 'Chưa quan sát thấy hoa tại thời điểm khảo sát.',
-        fruits: fruitsTrait || 'Chưa quan sát thấy quả.',
-        roots: rootsTrait || 'Chưa đào lấy củ rễ để bảo tồn sinh thái.',
+      identificationTraits: {
+        growthForm: growthForm.trim() || basePlant?.identificationTraits?.growthForm || 'Cây thảo / cây bụi tự nhiên.',
+        leaves: leavesTrait.trim() || basePlant?.identificationTraits?.leaves || 'Đang cập nhật tiêu bản lá.',
+        flowers: flowersAndFruitsTrait.trim() || basePlant?.identificationTraits?.flowers || 'Chưa quan sát thấy hoa / quả tại thời điểm khảo sát.',
+        fruits: '',
+        roots: rootsTrait.trim() || basePlant?.identificationTraits?.roots || 'Chưa đào lấy củ rễ để bảo tồn sinh thái.',
       },
       habitat: habitat.trim(),
       habitatCategory: habitatCategory,
@@ -830,6 +827,75 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             </div>
           </div>
 
+          {/* SECTION: 4 ĐẶC ĐIỂM HÌNH THÁI NHẬN BIẾT */}
+          <div className="space-y-3 bg-emerald-50/40 p-4 rounded-3xl border border-emerald-200/80">
+            <div className="flex items-center justify-between border-b border-emerald-200/80 pb-1.5">
+              <h3 className="font-bold text-sm text-emerald-950 flex items-center gap-2">
+                <TreePine className="w-4 h-4 text-emerald-700" /> Đặc điểm hình thái nhận biết thực địa
+              </h3>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                Tiêu bản số hóa
+              </span>
+            </div>
+            <p className="text-[11px] text-emerald-900/80">
+              Ghi nhận các đặc trưng phân loại thực vật học quan sát được tại hiện trường giúp đối chiếu nhận diện loài và xây dựng tiêu bản số.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1 text-xs">
+                  1. Dạng sống và Thân cành:
+                </label>
+                <input
+                  type="text"
+                  value={growthForm}
+                  onChange={(e) => setGrowthForm(e.target.value)}
+                  placeholder="Ví dụ: Cây thảo sống nhiều năm, thân vuông mọc đứng, cao 40-70cm..."
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1 text-xs">
+                  2. Đặc điểm Lá:
+                </label>
+                <input
+                  type="text"
+                  value={leavesTrait}
+                  onChange={(e) => setLeavesTrait(e.target.value)}
+                  placeholder="Ví dụ: Lá mọc đối chéo chữ thập, phiến lá hình trứng thuôn dài..."
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1 text-xs">
+                  3. Hoa và quả:
+                </label>
+                <input
+                  type="text"
+                  value={flowersAndFruitsTrait}
+                  onChange={(e) => setFlowersAndFruitsTrait(e.target.value)}
+                  placeholder="Ví dụ: Cụm hoa chùm nách lá màu trắng phớt tím; quả nang dẹp..."
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1 text-xs">
+                  4. Rễ / Củ:
+                </label>
+                <input
+                  type="text"
+                  value={rootsTrait}
+                  onChange={(e) => setRootsTrait(e.target.value)}
+                  placeholder="Ví dụ: Rễ cọc đâm sâu, củ phình to nạc màu vàng ngà, thơm..."
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white text-xs"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* SECTION 2: GPS LOCATION, COMMUNE SECTION & HABITAT (CRITICAL FOR NEW SURVEYS) */}
           <div className="space-y-3 bg-stone-50/80 p-4 rounded-3xl border border-stone-200">
             <h3 className="font-bold text-sm text-stone-900 border-b border-stone-200 pb-1.5 flex items-center justify-between">
@@ -893,7 +959,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                     Căn cứ mức độ phong phú & nguy cơ khai thác thực tế
                   </span>
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => handleConservationStatusChange('An toàn')}
@@ -907,7 +973,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                       <span>🟢 An toàn</span>
                     </div>
                     <span className={`text-[10px] ${conservationStatus === 'An toàn' ? 'text-emerald-100' : 'text-stone-500'}`}>
-                      Cây phổ biến, sinh trưởng tốt trong tự nhiên/vườn
+                      Còn tồn tại & sinh trưởng tốt
                     </span>
                   </button>
 
@@ -924,7 +990,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                       <span>🟡 Sắp nguy cấp</span>
                     </div>
                     <span className={`text-[10px] ${conservationStatus === 'Sắp nguy cấp' ? 'text-amber-100' : 'text-stone-500'}`}>
-                      Quần thể thu hẹp / Bị thu hái quá mức
+                      Bị suy thoái / Quần thể thu hẹp
                     </span>
                   </button>
 
@@ -938,10 +1004,27 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🔴 Nguy cấp / Cần bảo tồn</span>
+                      <span>🔴 Nguy cấp</span>
                     </div>
                     <span className={`text-[10px] ${conservationStatus === 'Nguy cấp / Cần bảo tồn' ? 'text-rose-100' : 'text-stone-500'}`}>
-                      Quý hiếm theo Sách Đỏ, ưu tiên bảo vệ
+                      Rất quý hiếm, ưu tiên bảo tồn
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleConservationStatusChange('Đã biến mất')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                      conservationStatus === 'Đã biến mất'
+                        ? 'bg-stone-800 text-white border-stone-900 shadow-sm'
+                        : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span>⚫ Đã biến mất</span>
+                    </div>
+                    <span className={`text-[10px] ${conservationStatus === 'Đã biến mất' ? 'text-stone-300' : 'text-stone-500'}`}>
+                      Không còn tìm thấy ở điểm này
                     </span>
                   </button>
                 </div>
@@ -1116,7 +1199,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                   type="text"
                   value={surveyor}
                   onChange={(e) => setSurveyor(e.target.value)}
-                  placeholder="Ví dụ: Nhóm STEM Trường THCS Tam Anh"
+                  placeholder="Ví dụ: Nhóm STEM Trường THCS Nguyễn Khuyến"
                   className="w-full p-2 rounded-xl border border-stone-300 bg-stone-50"
                 />
               </div>

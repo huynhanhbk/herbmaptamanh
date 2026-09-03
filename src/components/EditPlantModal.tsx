@@ -11,7 +11,9 @@ import {
   CheckCircle, 
   Plus, 
   Trash2,
-  Clock
+  Clock,
+  TreePine,
+  Check
 } from 'lucide-react';
 import { 
   MedicinalPlant, 
@@ -50,11 +52,20 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   const [coverImage, setCoverImage] = useState(plant.coverImage);
   const [shortDescription, setShortDescription] = useState(plant.shortDescription || '');
   
-  // Traits
+  // Traits (4 Unified Fields)
   const [growthForm, setGrowthForm] = useState(plant.identificationTraits?.growthForm || 'Thân thảo');
   const [leaves, setLeaves] = useState(plant.identificationTraits?.leaves || '');
-  const [flowers, setFlowers] = useState(plant.identificationTraits?.flowers || '');
-  const [fruits, setFruits] = useState(plant.identificationTraits?.fruits || '');
+  const [flowersAndFruits, setFlowersAndFruits] = useState(
+    plant.identificationTraits?.flowers
+      ? (plant.identificationTraits?.fruits && !plant.identificationTraits.flowers.includes(plant.identificationTraits.fruits)
+          ? `${plant.identificationTraits.flowers} — ${plant.identificationTraits.fruits}`
+          : plant.identificationTraits.flowers)
+      : (plant.identificationTraits?.fruits || '')
+  );
+  const [roots, setRoots] = useState(plant.identificationTraits?.roots || '');
+
+  // Confirmation modal state
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
   // Habitat & Location
   const [habitatCategory, setHabitatCategory] = useState<HabitatCategory>(plant.habitatCategory || 'garden');
@@ -95,8 +106,10 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       setShortDescription(plant.shortDescription || '');
       setGrowthForm(plant.identificationTraits?.growthForm || 'Thân thảo');
       setLeaves(plant.identificationTraits?.leaves || '');
-      setFlowers(plant.identificationTraits?.flowers || '');
-      setFruits(plant.identificationTraits?.fruits || '');
+      const flw = plant.identificationTraits?.flowers || '';
+      const frt = plant.identificationTraits?.fruits || '';
+      setFlowersAndFruits(flw ? (frt && !flw.includes(frt) ? `${flw} — ${frt}` : flw) : frt);
+      setRoots(plant.identificationTraits?.roots || '');
       setHabitatCategory(plant.habitatCategory || 'garden');
       setHabitat(plant.habitat || '');
       setLat(plant.location?.lat?.toString() || '15.485');
@@ -118,6 +131,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       setStatus(plant.status || 'verified');
       setSurveyor(plant.dataSource?.surveyor || '');
       setValidationError(null);
+      setIsConfirmOpen(false);
     }
   }, [plant, isOpen]);
 
@@ -174,6 +188,14 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       return;
     }
 
+    // Open confirmation popup before executing the save
+    setIsConfirmOpen(true);
+  };
+
+  const executeActualSave = () => {
+    const parsedLat = parseFloat(lat);
+    const parsedLng = parseFloat(lng);
+
     let conservationLevel: ConservationLevel = 'safe';
     let occurrenceStatus: PlantOccurrenceStatus = 'present';
     let isDisappeared = false;
@@ -213,8 +235,9 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       identificationTraits: {
         growthForm: growthForm.trim(),
         leaves: leaves.trim(),
-        flowers: flowers.trim(),
-        fruits: fruits.trim(),
+        flowers: flowersAndFruits.trim(),
+        fruits: '',
+        roots: roots.trim(),
       },
       location: {
         ...plant.location,
@@ -239,6 +262,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     };
 
     onSave(plant.id, updatedData);
+    setIsConfirmOpen(false);
     onClose();
   };
 
@@ -470,35 +494,37 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
           {/* TAB 2: TRAITS */}
           {activeTab === 'traits' && (
             <div className="space-y-4 animate-fadeIn">
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-2xl flex items-center gap-2.5 text-emerald-900 text-xs">
+                <TreePine className="w-4 h-4 text-emerald-700 shrink-0" />
+                <span>
+                  <b>4 Đặc điểm hình thái nhận biết:</b> Dữ liệu phân loại học chuẩn giúp đối chiếu nhận dạng cây thuốc ngoài thực địa và tạo tiêu bản số hóa.
+                </span>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Dạng sống / Thân cây:
+                    1. Dạng sống và Thân cành:
                   </label>
-                  <select
+                  <input
+                    type="text"
                     value={growthForm}
                     onChange={(e) => setGrowthForm(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
-                  >
-                    <option value="Thân thảo nhiều năm">Thân thảo nhiều năm</option>
-                    <option value="Thân thảo hàng năm">Thân thảo hàng năm</option>
-                    <option value="Cây bụi nhỏ">Cây bụi nhỏ</option>
-                    <option value="Cây bụi leo / Dây leo">Cây bụi leo / Dây leo</option>
-                    <option value="Cây thân gỗ nhỏ">Cây thân gỗ nhỏ</option>
-                    <option value="Thực vật biểu sinh / Thân rễ">Thực vật biểu sinh / Thân rễ</option>
-                  </select>
+                    placeholder="Ví dụ: Cây thảo sống nhiều năm, thân vuông mọc đứng, cao 40-70cm..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 focus:outline-none focus:border-amber-500 text-xs"
+                  />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Đặc điểm Lá:
+                    2. Đặc điểm Lá:
                   </label>
                   <input
                     type="text"
                     value={leaves}
                     onChange={(e) => setLeaves(e.target.value)}
-                    placeholder="Mọc so le, mép nguyên hoặc xẻ thùy, có gai..."
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
+                    placeholder="Ví dụ: Lá mọc đối chéo chữ thập, phiến lá hình trứng thuôn dài, mép khía răng..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 focus:outline-none focus:border-amber-500 text-xs"
                   />
                 </div>
               </div>
@@ -506,27 +532,27 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Đặc điểm Hoa:
+                    3. Hoa và quả:
                   </label>
                   <input
                     type="text"
-                    value={flowers}
-                    onChange={(e) => setFlowers(e.target.value)}
-                    placeholder="Màu sắc, cụm hoa ở nách lá hay đầu cành..."
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
+                    value={flowersAndFruits}
+                    onChange={(e) => setFlowersAndFruits(e.target.value)}
+                    placeholder="Ví dụ: Cụm hoa chùm nách lá màu trắng phớt tím; quả nang dẹp, chứa 4 hạt..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 focus:outline-none focus:border-amber-500 text-xs"
                   />
                 </div>
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Đặc điểm Quả / Hạt / Thân củ:
+                    4. Rễ / Củ:
                   </label>
                   <input
                     type="text"
-                    value={fruits}
-                    onChange={(e) => setFruits(e.target.value)}
-                    placeholder="Quả mọng hình cầu, khi chín màu đỏ mọng..."
-                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50"
+                    value={roots}
+                    onChange={(e) => setRoots(e.target.value)}
+                    placeholder="Ví dụ: Rễ cọc đâm sâu, có rễ củ nạc phình to màu vàng ngà, thơm nồng..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 bg-stone-50 focus:outline-none focus:border-amber-500 text-xs"
                   />
                 </div>
               </div>
@@ -853,6 +879,78 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* CONFIRMATION POPUP BEFORE SAVING */}
+      {isConfirmOpen && (
+        <div className="fixed inset-0 z-60 bg-stone-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-white rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl border border-stone-200 text-stone-800 space-y-4 animate-scaleUp">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-5 h-5 text-amber-800" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-stone-900">Xác Nhận Lưu Hồ Sơ</h3>
+                <p className="text-xs text-stone-500">
+                  Mã định danh: <span className="font-mono font-bold text-amber-800">{plant.id}</span>
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-stone-50 p-3.5 rounded-2xl border border-stone-200 space-y-2 text-xs">
+              <div className="flex justify-between">
+                <span className="text-stone-500">Tên cây thuốc:</span>
+                <span className="font-bold text-stone-900">{vietnameseName}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-stone-500">Tình trạng bảo tồn thực địa:</span>
+                <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
+                  unifiedStatus === 'Nguy cấp / Cần bảo tồn' ? 'bg-rose-100 text-rose-800 border-rose-300' :
+                  unifiedStatus === 'Sắp nguy cấp' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                  unifiedStatus === 'Đã biến mất' ? 'bg-stone-200 text-stone-800 border-stone-300' :
+                  'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
+                  {unifiedStatus === 'An toàn' && '🟢 An toàn (Còn tồn tại)'}
+                  {unifiedStatus === 'Sắp nguy cấp' && '🟡 Sắp nguy cấp (Bị suy thoái)'}
+                  {unifiedStatus === 'Nguy cấp / Cần bảo tồn' && '🔴 Nguy cấp / Cần bảo tồn'}
+                  {unifiedStatus === 'Đã biến mất' && '⚫ Đã biến mất'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Địa bàn & Sinh cảnh:</span>
+                <span className="font-medium text-stone-800">{communeSection}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-stone-500">Kiểm duyệt KHKT:</span>
+                <span className="font-semibold text-emerald-700">
+                  {status === 'verified' ? 'Đã xác nhận thực địa' : 'Chờ thẩm định'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Bạn có chắc chắn muốn lưu cập nhật này vào cơ sở dữ liệu? Dữ liệu bản đồ số và danh lục tra cứu sẽ được cập nhật đồng bộ ngay lập tức.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl text-stone-600 hover:text-stone-900 hover:bg-stone-100 font-semibold text-xs transition-colors"
+              >
+                Quay lại chỉnh sửa
+              </button>
+              <button
+                type="button"
+                onClick={executeActualSave}
+                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-colors flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" />
+                <span>Xác Nhận Lưu Hồ Sơ</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

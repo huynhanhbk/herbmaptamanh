@@ -409,35 +409,27 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-stone-500">Tình trạng bảo tồn:</span>
-                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
-                    plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
+                  <span className="text-stone-500">Tình trạng bảo tồn thực địa:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
+                    isDisappeared
+                      ? 'bg-stone-200 text-stone-800 border border-stone-300'
+                      : plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
                       ? 'bg-rose-100 text-rose-800 border border-rose-200' 
-                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.conservationLevel === 'rare'
+                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.occurrenceStatus === 'degraded'
                       ? 'bg-amber-100 text-amber-800 border border-amber-200' 
                       : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
                   }`}>
-                    {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-stone-500">Hiện trạng thực địa:</span>
-                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
-                    isDisappeared
-                      ? 'bg-stone-200 text-stone-800 border border-stone-300'
-                      : plant.occurrenceStatus === 'degraded'
-                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  }`}>
                     {isDisappeared
                       ? '⚫ Đã biến mất'
-                      : plant.occurrenceStatus === 'degraded'
-                      ? '🟡 Bị suy thoái'
-                      : '🟢 Còn tồn tại & Phát triển'}
+                      : plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
+                      ? '🔴 Nguy cấp / Cần bảo tồn'
+                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.occurrenceStatus === 'degraded'
+                      ? '🟡 Sắp nguy cấp (Bị suy thoái)'
+                      : '🟢 An toàn (Còn tồn tại & Phát triển)'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-stone-500">Kiểm duyệt:</span>
+                  <span className="text-stone-500">Kiểm duyệt KHKT:</span>
                   <span className="font-semibold text-emerald-700 flex items-center gap-1">
                     <Check className="w-3.5 h-3.5" /> {plant.status === 'verified' ? 'Đã xác nhận thực địa' : 'Chờ thẩm định'}
                   </span>
@@ -460,7 +452,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                 </h4>
                 <div className="grid grid-cols-1 gap-2 text-xs">
                   <div className="bg-white p-2.5 rounded-xl border border-stone-100 shadow-2xs">
-                    <span className="font-semibold text-stone-900 block mb-0.5">Dạng sống & Thân cành:</span>
+                    <span className="font-semibold text-stone-900 block mb-0.5">Dạng sống và Thân cành:</span>
                     <span className="text-stone-600 leading-relaxed">{plant.identificationTraits.growthForm}</span>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-stone-100 shadow-2xs">
@@ -468,17 +460,17 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                     <span className="text-stone-600 leading-relaxed">{plant.identificationTraits.leaves}</span>
                   </div>
                   <div className="bg-white p-2.5 rounded-xl border border-stone-100 shadow-2xs">
-                    <span className="font-semibold text-stone-900 block mb-0.5">Hoa & Quả:</span>
+                    <span className="font-semibold text-stone-900 block mb-0.5">Hoa và quả:</span>
                     <span className="text-stone-600 leading-relaxed">
-                      {plant.identificationTraits.flowers} {plant.identificationTraits.fruits && `— ${plant.identificationTraits.fruits}`}
+                      {plant.identificationTraits.flowers} {plant.identificationTraits.fruits && !plant.identificationTraits.flowers.includes(plant.identificationTraits.fruits) && `— ${plant.identificationTraits.fruits}`}
                     </span>
                   </div>
-                  {plant.identificationTraits.roots && (
-                    <div className="bg-white p-2.5 rounded-xl border border-stone-100 shadow-2xs">
-                      <span className="font-semibold text-stone-900 block mb-0.5">Rễ / Củ:</span>
-                      <span className="text-stone-600 leading-relaxed">{plant.identificationTraits.roots}</span>
-                    </div>
-                  )}
+                  <div className="bg-white p-2.5 rounded-xl border border-stone-100 shadow-2xs">
+                    <span className="font-semibold text-stone-900 block mb-0.5">Rễ / Củ:</span>
+                    <span className="text-stone-600 leading-relaxed">
+                      {plant.identificationTraits.roots || 'Chưa quan sát hoặc không khai thác rễ củ để bảo tồn sinh thái tự nhiên.'}
+                    </span>
+                  </div>
                 </div>
               </div>
 

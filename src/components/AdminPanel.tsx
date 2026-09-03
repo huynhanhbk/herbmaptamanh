@@ -565,7 +565,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <span>{plant.location.lat.toFixed(5)}, {plant.location.lng.toFixed(5)}</span>
                             </div>
                             <span className="text-[11px] text-stone-600 block mt-0.5">
-                              {plant.location.address || 'Tam Anh, Núi Thành, Quảng Nam'}
+                              {plant.location.address || 'Tam Anh, TP.Đà Nẵng'}
                             </span>
                           </td>
 

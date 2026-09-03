@@ -390,7 +390,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <h3 className="font-bold text-base">Giải Pháp Giáo Dục STEM & Bảo Tồn Thực Địa Cấp Xã</h3>
         </div>
         <p className="text-xs text-emerald-100 leading-relaxed max-w-3xl">
-          Đề tài ứng dụng HerbMap Tam Anh đề xuất mô hình <b>Vườn Thực Nghiệm Dược Liệu Học Đường</b> tại trường THCS Tam Anh và Trạm Y tế xã:
+          Đề tài ứng dụng HerbMap Tam Anh đề xuất mô hình <b>Vườn Thực Nghiệm Dược Liệu Học Đường</b> tại trường THCS Nguyễn Khuyến và Trạm Y tế xã:
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
           <div className="bg-emerald-950/60 p-3.5 rounded-2xl border border-emerald-700/60 space-y-1">
@@ -408,7 +408,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="bg-emerald-950/60 p-3.5 rounded-2xl border border-emerald-700/60 space-y-1">
             <span className="font-bold text-amber-300 block">3. Trải nghiệm học tập STEM Sinh - Hóa</span>
             <p className="text-emerald-200/90 text-[11px]">
-              Học sinh dùng điện thoại khảo sát, phân tích hoạt chất saponin, flavonoid thảo dược và cập nhật bản đồ số.
+              Học sinh dùng điện thoại khảo sát, phân tích và cập nhật bản đồ số.
             </p>
           </div>
         </div>

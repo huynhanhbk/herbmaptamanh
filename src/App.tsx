@@ -338,7 +338,7 @@ export function App() {
             <div>
               <h3 className="font-bold text-base text-stone-900">Đăng nhập Ban Quản Trị</h3>
               <p className="text-xs text-stone-500 mt-1">
-                Dành cho Ban Quản trị và Thầy Cô hướng dẫn để kiểm duyệt và quản trị cơ sở dữ liệu thực địa.
+                Dành cho Ban Quản trị kiểm duyệt và quản trị cơ sở dữ liệu thực địa.
               </p>
             </div>
 
