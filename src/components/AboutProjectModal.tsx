@@ -13,6 +13,7 @@ import {
   Layers,
   GraduationCap
 } from 'lucide-react';
+import { HerbMapLogo } from './HerbMapLogo';
 
 interface AboutProjectModalProps {
   isOpen: boolean;
@@ -31,8 +32,8 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
         {/* Header */}
         <div className="bg-gradient-to-r from-emerald-950 to-stone-900 text-white px-6 py-5 flex items-center justify-between border-b border-emerald-900">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-700 flex items-center justify-center shadow-xs text-amber-300">
-              <Award className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-full bg-white p-1 flex items-center justify-center shadow-md ring-2 ring-emerald-400/40 shrink-0">
+              <HerbMapLogo size="100%" variant="icon" />
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold">Về Đề Tài HerbMap Tam Anh</h2>
@@ -52,6 +53,22 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
 
         {/* Content Body */}
         <div className="overflow-y-auto p-5 sm:p-7 space-y-6 text-xs leading-relaxed">
+          {/* Logo & Visual Identity Banner */}
+          <div className="bg-gradient-to-br from-emerald-50 via-white to-stone-50 p-4 sm:p-5 rounded-2xl border border-emerald-200 shadow-2xs flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+            <div className="w-28 h-28 sm:w-32 sm:h-32 shrink-0 bg-white rounded-2xl p-2 shadow-xs border border-emerald-100 flex items-center justify-center">
+              <HerbMapLogo size="100%" variant="full" />
+            </div>
+            <div className="space-y-1.5 text-stone-700">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm text-emerald-950">Biểu Trưng Chính Thức (Logo HerbMap Tam Anh)</span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">KHKT 2026</span>
+              </div>
+              <p className="text-[11px] text-stone-600 leading-relaxed">
+                Biểu trưng hội tụ 4 yếu tố cốt lõi: <b>Ghim định vị GPS</b> (công nghệ số không gian), <b>Mầm lá xanh</b> (hệ cây thuốc bản địa), <b>Trang sách bản đồ & dòng sông</b> (kho tàng tri thức dân gian và sinh thái lưu vực sông Tam Anh), cùng <b>Vòng cung bảo tồn</b> thể hiện sự gìn giữ bền vững.
+              </p>
+            </div>
+          </div>
+
           {/* Section 1: Context & Objectives */}
           <div className="space-y-2">
             <h3 className="font-bold text-sm text-stone-900 flex items-center gap-2">

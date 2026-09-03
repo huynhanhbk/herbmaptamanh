@@ -32,6 +32,7 @@ import {
   Sparkles,
   Layers
 } from 'lucide-react';
+import { HerbMapLogo } from './HerbMapLogo';
 
 interface DashboardViewProps {
   plants: MedicinalPlant[];
@@ -128,6 +129,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <p className="text-xs sm:text-sm text-stone-300 max-w-2xl mt-1 leading-relaxed">
               Tổng hợp dữ liệu điều tra thực địa, phân bố sinh cảnh, mật độ tần suất và đánh giá nguy cơ suy giảm nguồn dược liệu bản địa tại xã Tam Anh.
             </p>
+          </div>
+
+          <div className="hidden md:flex items-center gap-3 bg-white/10 backdrop-blur-xs p-3 rounded-2xl border border-white/10 shrink-0">
+            <div className="w-14 h-14 bg-white rounded-full p-1 shadow-md flex items-center justify-center shrink-0">
+              <HerbMapLogo size="100%" variant="icon" />
+            </div>
+            <div className="text-left pr-2">
+              <span className="font-extrabold text-sm block tracking-tight text-white">HERBMAP</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-300 block">TAM ANH</span>
+              <span className="text-[9px] text-stone-400 block mt-0.5">Hệ thống CSDL không gian</span>
+            </div>
           </div>
         </div>
       </div>

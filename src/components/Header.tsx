@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { MedicinalPlant } from '../types';
 import { searchPlants } from '../utils/searchHelper';
+import { HerbMapLogo } from './HerbMapLogo';
 
 interface HeaderProps {
   activeTab: 'map' | 'catalog' | 'dashboard' | 'admin';
@@ -109,8 +110,8 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-2.5 cursor-pointer select-none shrink-0 group"
             onClick={() => setActiveTab('map')}
           >
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-400 flex items-center justify-center shadow-md shadow-emerald-950/50 group-hover:scale-105 transition-transform duration-200">
-              <Leaf className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white p-0.5 flex items-center justify-center shadow-md shadow-emerald-950/40 ring-1.5 ring-emerald-400/40 group-hover:scale-105 group-hover:ring-emerald-400 transition-all duration-200 shrink-0 overflow-hidden">
+              <HerbMapLogo size="100%" variant="icon" />
             </div>
             <div>
               <div className="flex items-center gap-1.5 leading-none">

@@ -8,6 +8,7 @@ import {
   getConservationStatusLabel
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
+import { HerbMapLogo } from './HerbMapLogo';
 import { 
   X, 
   MapPin, 
@@ -178,8 +179,10 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 animate-fadeIn">
       {/* Hidden printable field signage card for print mode */}
       <div className="printable-qr-sign hidden print:block bg-white p-8 max-w-md mx-auto border-4 border-emerald-900 rounded-3xl text-stone-900 text-center font-sans">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <span className="text-2xl">🌿</span>
+        <div className="flex flex-col items-center justify-center gap-1 mb-2">
+          <div className="w-14 h-14">
+            <HerbMapLogo size="100%" variant="icon" />
+          </div>
           <span className="text-xl font-bold tracking-tight text-emerald-900 uppercase">HerbMap Tam Anh</span>
         </div>
         <p className="text-xs font-semibold uppercase tracking-widest text-emerald-700 mb-4 border-b-2 border-emerald-100 pb-2">
@@ -1041,7 +1044,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
         {/* Footer Actions */}
         <div className="sticky bottom-0 bg-stone-100 px-4 sm:px-6 py-3 border-t border-stone-200 flex items-center justify-between gap-3">
-          <span className="text-[11px] text-stone-500 font-medium">
+          <span className="text-[11px] text-stone-500 font-medium flex items-center gap-1.5">
+            <HerbMapLogo size={16} variant="icon" />
             HerbMap Tam Anh — Khoa học Kỹ thuật 2026
           </span>
           <div className="flex items-center gap-2">
