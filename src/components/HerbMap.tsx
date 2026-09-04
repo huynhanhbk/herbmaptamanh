@@ -482,7 +482,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                 <Filter className="w-3.5 h-3.5" />
               </div>
               <span className="font-bold text-stone-200 text-xs tracking-wide group-hover:text-white transition-colors truncate">
-                Lọc 5 Trạng Thái & Sinh Cảnh
+                Lọc Trạng Thái & Sinh Cảnh
               </span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[11px] font-semibold font-mono shrink-0">
                 {filteredPlants.length}/{plants.length}
