@@ -7,7 +7,8 @@ import {
   COMMUNE_VILLAGES,
   getHabitatLabel,
   getConservationStatusLabel,
-  getPlantSurveyStatus
+  getPlantSurveyStatus,
+  SurveyPointStatusKey
 } from '../types';
 import { 
   Search, 
@@ -48,26 +49,24 @@ export const CatalogList: React.FC<CatalogListProps> = ({
   onOpenAIScanner,
 }) => {
   const [selectedHabitat, setSelectedHabitat] = useState<'all' | HabitatCategory>('all');
-  const [selectedConservation, setSelectedConservation] = useState<'all' | ConservationLevel>('all');
   const [selectedCommune, setSelectedCommune] = useState<string>('all');
-  const [selectedOccurrence, setSelectedOccurrence] = useState<'all' | 'present' | 'degraded' | 'disappeared'>('all');
+  const [selectedOccurrence, setSelectedOccurrence] = useState<'all' | SurveyPointStatusKey>('all');
 
-  // Counts for occurrence status
+  // Counts for 04 field survey statuses
   const occurrenceCounts = useMemo(() => {
     return {
       all: plants.length,
-      present: plants.filter((p) => (!p.occurrenceStatus || p.occurrenceStatus === 'present') && !p.isDisappeared).length,
-      degraded: plants.filter((p) => p.occurrenceStatus === 'degraded' && !p.isDisappeared).length,
-      disappeared: plants.filter((p) => p.occurrenceStatus === 'disappeared' || p.isDisappeared).length,
+      safe: plants.filter((p) => getPlantSurveyStatus(p).key === 'safe').length,
+      degraded: plants.filter((p) => getPlantSurveyStatus(p).key === 'degraded').length,
+      disappeared: plants.filter((p) => getPlantSurveyStatus(p).key === 'disappeared').length,
+      new: plants.filter((p) => getPlantSurveyStatus(p).key === 'new').length,
     };
   }, [plants]);
 
   // Filtered plants
   const filteredPlants = useMemo(() => {
     return plants.filter((plant) => {
-      const isDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
-      const isDegraded = !isDisappeared && plant.occurrenceStatus === 'degraded';
-      const isPresent = !isDisappeared && !isDegraded;
+      const statusMeta = getPlantSurveyStatus(plant);
 
       // Smart exact & approximate search query filter
       if (searchQuery.trim()) {
@@ -76,18 +75,13 @@ export const CatalogList: React.FC<CatalogListProps> = ({
         }
       }
 
-      // Occurrence status filter
-      if (selectedOccurrence === 'present' && !isPresent) return false;
-      if (selectedOccurrence === 'degraded' && !isDegraded) return false;
-      if (selectedOccurrence === 'disappeared' && !isDisappeared) return false;
-
-      // Habitat filter
-      if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) {
+      // 04 field survey statuses filter
+      if (selectedOccurrence !== 'all' && statusMeta.key !== selectedOccurrence) {
         return false;
       }
 
-      // Conservation filter
-      if (selectedConservation !== 'all' && plant.conservationLevel !== selectedConservation) {
+      // Habitat filter
+      if (selectedHabitat !== 'all' && plant.habitatCategory !== selectedHabitat) {
         return false;
       }
 
@@ -98,7 +92,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
 
       return true;
     });
-  }, [plants, searchQuery, selectedOccurrence, selectedHabitat, selectedConservation, selectedCommune]);
+  }, [plants, searchQuery, selectedOccurrence, selectedHabitat, selectedCommune]);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
@@ -162,9 +156,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           )}
         </div>
 
-        {/* Primary Occurrence Status Tabs */}
+        {/* Primary Field Survey Status Tabs (04 statuses) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs border-b border-stone-100 pb-2">
-          <span className="text-stone-400 font-semibold text-[11px] shrink-0 mr-1">Hiện trạng:</span>
+          <span className="text-stone-400 font-semibold text-[11px] shrink-0 mr-1">Hiện trạng thực địa:</span>
           <button
             onClick={() => setSelectedOccurrence('all')}
             className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
@@ -179,16 +173,16 @@ export const CatalogList: React.FC<CatalogListProps> = ({
             </span>
           </button>
           <button
-            onClick={() => setSelectedOccurrence('present')}
+            onClick={() => setSelectedOccurrence('safe')}
             className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedOccurrence === 'present'
+              selectedOccurrence === 'safe'
                 ? 'bg-emerald-700 text-white font-bold shadow-xs'
                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
             }`}
           >
-            <span>🟢 Đang tồn tại</span>
+            <span>🟢 An toàn</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-900/40 text-emerald-100 font-mono">
-              {occurrenceCounts.present}
+              {occurrenceCounts.safe}
             </span>
           </button>
           <button
@@ -199,7 +193,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 : 'bg-amber-50 hover:bg-amber-100 text-amber-900'
             }`}
           >
-            <span>🟡 Bị suy thoái</span>
+            <span>🟡 Bị suy giảm</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-900/40 text-amber-100 font-mono">
               {occurrenceCounts.degraded}
             </span>
@@ -208,14 +202,28 @@ export const CatalogList: React.FC<CatalogListProps> = ({
             onClick={() => setSelectedOccurrence('disappeared')}
             className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
               selectedOccurrence === 'disappeared'
-                ? 'bg-rose-800 text-white font-bold shadow-xs'
-                : 'bg-rose-50 hover:bg-rose-100 text-rose-900'
+                ? 'bg-stone-700 text-white font-bold shadow-xs'
+                : 'bg-stone-100 hover:bg-stone-200 text-stone-700'
             }`}
-            title="Lưu trữ các điểm khảo sát trong lịch sử nay cây đã mất hoặc cần trồng lại"
+            title="Các điểm khảo sát nay không còn tìm thấy cây tại tọa độ thực địa"
           >
-            <span>⚫ Điểm đã mất</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-rose-950/50 text-rose-200 font-mono">
+            <span>⚫ Biến mất</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-stone-800/50 text-stone-200 font-mono">
               {occurrenceCounts.disappeared}
+            </span>
+          </button>
+          <button
+            onClick={() => setSelectedOccurrence('new')}
+            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+              selectedOccurrence === 'new'
+                ? 'bg-purple-700 text-white font-bold shadow-xs'
+                : 'bg-purple-50 hover:bg-purple-100 text-purple-800'
+            }`}
+            title="Điểm mới khảo sát hoặc cộng đồng đóng góp"
+          >
+            <span>🟣 Điểm mới</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-900/40 text-purple-100 font-mono">
+              {occurrenceCounts.new}
             </span>
           </button>
         </div>
@@ -248,56 +256,14 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           ))}
         </div>
 
-        {/* Secondary filters: Conservation & Commune Village (15 villages) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-stone-400 font-semibold text-[11px] shrink-0">Bảo tồn:</span>
-            <button
-              onClick={() => setSelectedConservation('all')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] ${
-                selectedConservation === 'all' ? 'bg-stone-800 text-white font-bold' : 'text-stone-600 hover:bg-stone-100'
-              }`}
-            >
-              Tất cả
-            </button>
-            <button
-              onClick={() => setSelectedConservation('safe')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 ${
-                selectedConservation === 'safe'
-                  ? 'bg-emerald-600 text-white font-bold'
-                  : 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100'
-              }`}
-            >
-              🟢 An toàn
-            </button>
-            <button
-              onClick={() => setSelectedConservation('vulnerable')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 ${
-                selectedConservation === 'vulnerable'
-                  ? 'bg-amber-600 text-white font-bold'
-                  : 'text-amber-800 bg-amber-50 hover:bg-amber-100'
-              }`}
-            >
-              🟡 Sắp nguy cấp
-            </button>
-            <button
-              onClick={() => setSelectedConservation('endangered')}
-              className={`px-2.5 py-1 rounded-lg text-[11px] flex items-center gap-1 ${
-                selectedConservation === 'endangered'
-                  ? 'bg-rose-600 text-white font-bold'
-                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100'
-              }`}
-            >
-              🔴 Nguy cấp / Cần bảo tồn
-            </button>
-          </div>
-
+        {/* Location Filter: Commune Village (15 villages) */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100 text-xs">
           <div className="flex items-center gap-2">
-            <span className="text-stone-400 font-semibold text-[11px]">Khu vực (15 thôn):</span>
+            <span className="text-stone-500 font-semibold text-[11px]">Khu vực hành chính (15 thôn xã Tam Anh):</span>
             <select
               value={selectedCommune}
               onChange={(e) => setSelectedCommune(e.target.value)}
-              className="text-xs p-1.5 rounded-lg border border-stone-300 bg-stone-50 font-medium text-stone-700 max-w-[200px]"
+              className="text-xs p-1.5 rounded-lg border border-stone-300 bg-stone-50 font-medium text-stone-700 min-w-[220px]"
             >
               <option value="all">Toàn bộ 15 thôn xã Tam Anh</option>
               {COMMUNE_VILLAGES.map((v) => (
@@ -322,7 +288,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
             onClick={() => {
               setSearchQuery('');
               setSelectedHabitat('all');
-              setSelectedConservation('all');
+              setSelectedOccurrence('all');
               setSelectedCommune('all');
             }}
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold"
@@ -342,10 +308,8 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1 ${
                   isPlantDisappeared 
                     ? 'border-stone-300 bg-stone-50/70 opacity-90' 
-                    : statusMeta.key === 'vulnerable'
+                    : statusMeta.key === 'degraded'
                     ? 'border-amber-300' 
-                    : statusMeta.key === 'endangered'
-                    ? 'border-rose-300'
                     : statusMeta.key === 'new'
                     ? 'border-purple-300'
                     : 'border-stone-200/90'
@@ -400,17 +364,21 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                     </div>
 
                     {isPlantDisappeared ? (
-                      <div className="mt-2 p-2 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 space-y-1">
+                      <div className="mt-2 p-2 bg-stone-100 border border-stone-300 rounded-xl text-[11px] text-stone-800 space-y-1">
                         <p className="font-semibold flex items-center gap-1">
-                          <span>⚠️ Điểm thuốc đã mất khỏi thực địa</span>
+                          <span>⚫ Điểm thuốc đã mất khỏi thực địa</span>
                         </p>
-                        <p className="text-[10.5px] text-rose-700 leading-snug">
-                          Dữ liệu đã được lưu trữ trong danh mục Điểm đã mất. Có thể phục hồi khi trồng lại cây mới tại vị trí này.
+                        <p className="text-[10.5px] text-stone-600 leading-snug">
+                          Dữ liệu lưu trữ thực địa. Có thể khôi phục khi phát hiện lại hoặc trồng mới tại vị trí này.
                         </p>
                       </div>
-                    ) : statusMeta.key === 'vulnerable' ? (
+                    ) : statusMeta.key === 'degraded' ? (
                       <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center gap-1.5">
-                        <span>⚠️ <b>Hiện trạng:</b> Quần thể sắp nguy cấp / bị suy thoái số lượng.</span>
+                        <span>⚠️ <b>Hiện trạng:</b> Quần thể bị suy giảm số lượng cá thể ngoài thực địa.</span>
+                      </div>
+                    ) : statusMeta.key === 'new' ? (
+                      <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-xl text-[11px] text-purple-900 flex items-center gap-1.5">
+                        <span>🟣 <b>Hiện trạng:</b> Điểm mới ghi nhận khảo sát / đóng góp cộng đồng.</span>
                       </div>
                     ) : (
                       <p className="text-xs text-stone-600 line-clamp-2 mt-2 leading-relaxed font-normal">

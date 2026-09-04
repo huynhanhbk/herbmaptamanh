@@ -84,12 +84,10 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   const [informantName, setInformantName] = useState(plant.traditionalUses?.informantName || 'Lương y & Nhân dân xã Tam Anh');
   const [informantRole, setInformantRole] = useState(plant.traditionalUses?.informantRole || 'Người dân bản địa');
 
-  // Status & Conservation (Unified 4 Options)
-  const initialUnifiedStatus: UnifiedConservationStatus = getConservationStatusLabel(
-    plant.conservationStatus,
-    plant.isDisappeared,
-    plant.occurrenceStatus
-  );
+  // Status & Field Occurrence (Unified 4 Options: An toàn | Bị suy giảm | Biến mất | Điểm mới)
+  const initialUnifiedStatus: UnifiedConservationStatus = plant 
+    ? (getPlantSurveyStatus(plant).label as UnifiedConservationStatus) 
+    : 'An toàn';
 
   const [unifiedStatus, setUnifiedStatus] = useState<UnifiedConservationStatus>(initialUnifiedStatus);
   const [status, setStatus] = useState<'verified' | 'pending'>(plant.status);
@@ -122,11 +120,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       setInformantName(plant.traditionalUses?.informantName || 'Lương y & Nhân dân xã Tam Anh');
       setInformantRole(plant.traditionalUses?.informantRole || 'Người dân bản địa');
       
-      const st = getConservationStatusLabel(
-        plant.conservationStatus,
-        plant.isDisappeared,
-        plant.occurrenceStatus
-      );
+      const st = getPlantSurveyStatus(plant).label as UnifiedConservationStatus;
       setUnifiedStatus(st);
       setStatus(plant.status || 'verified');
       setSurveyor(plant.dataSource?.surveyor || '');
@@ -200,17 +194,17 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     let occurrenceStatus: PlantOccurrenceStatus = 'present';
     let isDisappeared = false;
 
-    if (unifiedStatus === 'Đã biến mất') {
+    if (unifiedStatus === 'Biến mất') {
       occurrenceStatus = 'disappeared';
       isDisappeared = true;
       conservationLevel = 'safe';
-    } else if (unifiedStatus === 'Nguy cấp / Cần bảo tồn') {
-      conservationLevel = 'endangered';
-      occurrenceStatus = 'present';
-      isDisappeared = false;
-    } else if (unifiedStatus === 'Sắp nguy cấp') {
+    } else if (unifiedStatus === 'Bị suy giảm') {
       conservationLevel = 'vulnerable';
       occurrenceStatus = 'degraded';
+      isDisappeared = false;
+    } else if (unifiedStatus === 'Điểm mới') {
+      conservationLevel = 'safe';
+      occurrenceStatus = 'new';
       isDisappeared = false;
     } else {
       conservationLevel = 'safe';
@@ -638,10 +632,10 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 </select>
               </div>
 
-              {/* Unified Conservation & Field Occurrence Status */}
+              {/* Field Occurrence Status (04 States) */}
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Tình trạng bảo tồn & Hiện trạng thực địa (Thống nhất):
+                  Hiện trạng thực địa khảo sát (04 trạng thái):
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
@@ -669,73 +663,73 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                   </label>
 
                   <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'Sắp nguy cấp' 
+                    unifiedStatus === 'Bị suy giảm' 
                       ? 'bg-amber-50/90 border-amber-500 text-amber-950 ring-2 ring-amber-400 shadow-xs' 
                       : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                   }`}>
                     <input
                       type="radio"
                       name="modalUnifiedStatus"
-                      value="Sắp nguy cấp"
-                      checked={unifiedStatus === 'Sắp nguy cấp'}
-                      onChange={() => setUnifiedStatus('Sắp nguy cấp')}
+                      value="Bị suy giảm"
+                      checked={unifiedStatus === 'Bị suy giảm'}
+                      onChange={() => setUnifiedStatus('Bị suy giảm')}
                       className="mt-0.5 text-amber-600 focus:ring-amber-500"
                     />
                     <div>
                       <span className="font-bold text-xs flex items-center gap-1 text-amber-800">
                         <span>🟡</span>
-                        <span>Sắp nguy cấp</span>
+                        <span>Bị suy giảm</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Bị suy thoái / Suy giảm cá thể / Cần theo dõi bảo vệ.
+                        Quần thể bị suy giảm cá thể / suy thoái / sâu bệnh ngoài thực địa.
                       </span>
                     </div>
                   </label>
 
                   <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'Nguy cấp / Cần bảo tồn' 
-                      ? 'bg-rose-50/90 border-rose-500 text-rose-950 ring-2 ring-rose-400 shadow-xs' 
-                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="modalUnifiedStatus"
-                      value="Nguy cấp / Cần bảo tồn"
-                      checked={unifiedStatus === 'Nguy cấp / Cần bảo tồn'}
-                      onChange={() => setUnifiedStatus('Nguy cấp / Cần bảo tồn')}
-                      className="mt-0.5 text-rose-600 focus:ring-rose-500"
-                    />
-                    <div>
-                      <span className="font-bold text-xs flex items-center gap-1 text-rose-800">
-                        <span>🔴</span>
-                        <span>Nguy cấp / Cần bảo tồn</span>
-                      </span>
-                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Quý hiếm theo Sách Đỏ / Cá thể ít, cần ưu tiên nhân giống bảo tồn.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'Đã biến mất' 
+                    unifiedStatus === 'Biến mất' 
                       ? 'bg-stone-200 border-stone-600 text-stone-950 ring-2 ring-stone-500 shadow-xs' 
                       : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                   }`}>
                     <input
                       type="radio"
                       name="modalUnifiedStatus"
-                      value="Đã biến mất"
-                      checked={unifiedStatus === 'Đã biến mất'}
-                      onChange={() => setUnifiedStatus('Đã biến mất')}
+                      value="Biến mất"
+                      checked={unifiedStatus === 'Biến mất'}
+                      onChange={() => setUnifiedStatus('Biến mất')}
                       className="mt-0.5 text-stone-600 focus:ring-stone-500"
                     />
                     <div>
                       <span className="font-bold text-xs flex items-center gap-1 text-stone-800">
                         <span>⚫</span>
-                        <span>Đã biến mất</span>
+                        <span>Biến mất</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
                         Đã mất khỏi vị trí khảo sát / Lưu trữ trong danh mục Điểm đã mất.
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
+                    unifiedStatus === 'Điểm mới' 
+                      ? 'bg-purple-50/90 border-purple-500 text-purple-950 ring-2 ring-purple-400 shadow-xs' 
+                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="modalUnifiedStatus"
+                      value="Điểm mới"
+                      checked={unifiedStatus === 'Điểm mới'}
+                      onChange={() => setUnifiedStatus('Điểm mới')}
+                      className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                    />
+                    <div>
+                      <span className="font-bold text-xs flex items-center gap-1 text-purple-800">
+                        <span>🟣</span>
+                        <span>Điểm mới</span>
+                      </span>
+                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
+                        Điểm mới khảo sát / Ghi nhận phát hiện mới tại địa bàn.
                       </span>
                     </div>
                   </label>
@@ -902,17 +896,17 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 <span className="font-bold text-stone-900">{vietnameseName}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-stone-500">Tình trạng bảo tồn thực địa:</span>
+                <span className="text-stone-500">Hiện trạng thực địa:</span>
                 <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
-                  unifiedStatus === 'Nguy cấp / Cần bảo tồn' ? 'bg-rose-100 text-rose-800 border-rose-300' :
-                  unifiedStatus === 'Sắp nguy cấp' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                  unifiedStatus === 'Đã biến mất' ? 'bg-stone-200 text-stone-800 border-stone-300' :
+                  unifiedStatus === 'Biến mất' ? 'bg-stone-200 text-stone-800 border-stone-300' :
+                  unifiedStatus === 'Bị suy giảm' ? 'bg-amber-100 text-amber-800 border-amber-300' :
+                  unifiedStatus === 'Điểm mới' ? 'bg-purple-100 text-purple-800 border-purple-300' :
                   'bg-emerald-100 text-emerald-800 border-emerald-300'
                 }`}>
-                  {unifiedStatus === 'An toàn' && '🟢 An toàn (Còn tồn tại)'}
-                  {unifiedStatus === 'Sắp nguy cấp' && '🟡 Sắp nguy cấp (Bị suy thoái)'}
-                  {unifiedStatus === 'Nguy cấp / Cần bảo tồn' && '🔴 Nguy cấp / Cần bảo tồn'}
-                  {unifiedStatus === 'Đã biến mất' && '⚫ Đã biến mất'}
+                  {unifiedStatus === 'An toàn' && '🟢 An toàn'}
+                  {unifiedStatus === 'Bị suy giảm' && '🟡 Bị suy giảm'}
+                  {unifiedStatus === 'Biến mất' && '⚫ Biến mất'}
+                  {unifiedStatus === 'Điểm mới' && '🟣 Điểm mới'}
                 </span>
               </div>
               <div className="flex justify-between">

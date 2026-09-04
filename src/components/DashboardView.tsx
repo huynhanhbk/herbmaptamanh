@@ -17,7 +17,7 @@ import {
   MedicinalPlant, 
   HabitatCategory, 
   COMMUNE_VILLAGES,
-  getConservationStatusLabel
+  getPlantSurveyStatus
 } from '../types';
 import { 
   ShieldAlert, 
@@ -46,8 +46,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   // Metric calculations
   const totalPlants = plants.length;
   const verifiedCount = plants.filter((p) => p.status === 'verified').length;
-  const endangeredCount = plants.filter((p) => p.conservationLevel === 'endangered' || p.conservationLevel === 'rare').length;
-  const vulnerableCount = plants.filter((p) => p.conservationLevel === 'vulnerable').length;
+  
+  // Field survey occurrence counts (04 standardized states)
+  const safeCount = plants.filter((p) => getPlantSurveyStatus(p).key === 'safe').length;
+  const degradedCount = plants.filter((p) => getPlantSurveyStatus(p).key === 'degraded').length;
+  const disappearedCount = plants.filter((p) => getPlantSurveyStatus(p).key === 'disappeared').length;
+  const newPointsCount = plants.filter((p) => getPlantSurveyStatus(p).key === 'new').length;
+
   const folkRemediesCount = plants.filter((p) => p.traditionalUses.folkRemedies.length > 0).length;
 
   // Habitat Distribution Data (06 standardized habitats)
@@ -77,11 +82,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const habitatChartData = Object.values(habitatMap);
 
-  // Conservation Level Data
-  const conservationData = [
-    { name: 'An toàn', count: plants.filter((p) => p.conservationLevel === 'safe').length, color: '#10b981' },
-    { name: 'Sắp nguy cấp', count: vulnerableCount, color: '#f59e0b' },
-    { name: 'Nguy cấp / Cần bảo tồn', count: endangeredCount, color: '#e11d48' },
+  // Field Survey Occurrence Data (04 standardized states)
+  const occurrenceData = [
+    { name: 'An toàn', count: safeCount, color: '#10b981' },
+    { name: 'Bị suy giảm', count: degradedCount, color: '#f59e0b' },
+    { name: 'Biến mất', count: disappearedCount, color: '#44403c' },
+    { name: 'Điểm mới', count: newPointsCount, color: '#a855f7' },
   ];
 
   // Survey frequency by timeline (Months in 2026)
@@ -108,8 +114,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     };
   });
 
-  // Declining Species Alert
-  const decliningPlants = plants.filter((p) => p.trendStatus === 'declining' || p.conservationLevel === 'endangered' || p.conservationLevel === 'rare');
+  // Declining or Disappeared Species Alert
+  const decliningPlants = plants.filter((p) => {
+    const st = getPlantSurveyStatus(p);
+    return st.key === 'degraded' || st.key === 'disappeared';
+  });
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
@@ -151,10 +160,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <Leaf className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-semibold text-stone-500 block">Tổng loài ghi nhận</span>
+            <span className="text-xs font-semibold text-stone-500 block">Tổng điểm khảo sát</span>
             <span className="text-xl sm:text-2xl font-bold text-stone-900">{totalPlants}</span>
             <span className="text-[11px] text-emerald-600 font-medium block">
-              {verifiedCount} loài đã xác nhận
+              {verifiedCount} điểm đã xác nhận
             </span>
           </div>
         </div>
@@ -164,10 +173,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <ShieldAlert className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-semibold text-stone-500 block">Cần bảo tồn / Nguy cấp</span>
-            <span className="text-xl sm:text-2xl font-bold text-rose-700">{endangeredCount + vulnerableCount}</span>
+            <span className="text-xs font-semibold text-stone-500 block">Suy giảm & Biến mất</span>
+            <span className="text-xl sm:text-2xl font-bold text-rose-700">{degradedCount + disappearedCount}</span>
             <span className="text-[11px] text-rose-600 font-medium block">
-              {endangeredCount} loài nguy cấp cao
+              {degradedCount} suy giảm · {disappearedCount} biến mất
             </span>
           </div>
         </div>
@@ -186,14 +195,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-stone-200 shadow-sm flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-teal-100 text-teal-800 flex items-center justify-center shrink-0">
-            <MapPin className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+            <Sparkles className="w-6 h-6" />
           </div>
           <div>
-            <span className="text-xs font-semibold text-stone-500 block">Điểm khảo sát GPS</span>
-            <span className="text-xl sm:text-2xl font-bold text-teal-800">{totalPlants}</span>
-            <span className="text-[11px] text-teal-600 font-medium block">
-              Tại Tam Anh
+            <span className="text-xs font-semibold text-stone-500 block">Điểm mới phát hiện</span>
+            <span className="text-xl sm:text-2xl font-bold text-purple-800">{newPointsCount}</span>
+            <span className="text-[11px] text-purple-600 font-medium block">
+              Khảo sát thực địa 2026
             </span>
           </div>
         </div>
@@ -238,27 +247,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Conservation Status Breakdown (6 cols) */}
+        {/* Field Survey Occurrence Breakdown (6 cols) */}
         <div className="lg:col-span-6 bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-stone-900">Cấp Độ Bảo Tồn & Nguy Cơ</h3>
-              <p className="text-xs text-stone-500">Phân loại theo mức độ phong phú và nguy cơ cạn kiệt</p>
+              <h3 className="font-bold text-sm text-stone-900">Hiện Trạng Thực Địa (04 Trạng Thái)</h3>
+              <p className="text-xs text-stone-500">Thống kê theo 04 trạng thái ghi nhận thực tế tại các điểm khảo sát</p>
             </div>
-            <ShieldAlert className="w-5 h-5 text-rose-600" />
+            <ShieldAlert className="w-5 h-5 text-emerald-600" />
           </div>
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={conservationData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} />
+              <BarChart data={occurrenceData} margin={{ top: 20, right: 20, left: -10, bottom: 5 }}>
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                 <Tooltip 
-                  formatter={(value: any) => [`${value} loài`, 'Số lượng']}
+                  formatter={(value: any) => [`${value} điểm`, 'Số lượng']}
                   contentStyle={{ borderRadius: '0.75rem', fontSize: '12px' }}
                 />
                 <Bar dataKey="count" radius={[8, 8, 0, 0]}>
-                  {conservationData.map((entry, index) => (
+                  {occurrenceData.map((entry, index) => (
                     <Cell key={`bar-${index}`} fill={entry.color} />
                   ))}
                 </Bar>
@@ -331,7 +340,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </div>
 
-      {/* Early Warning Panel for Declining Species */}
+      {/* Early Warning Panel for Declining / Disappeared Species */}
       <div className="bg-rose-50/70 p-5 sm:p-6 rounded-3xl border-2 border-rose-200 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2.5">
@@ -340,58 +349,61 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
             <div>
               <h3 className="font-bold text-base text-rose-950">
-                Cảnh Báo Sớm: Các Loài Cây Thuốc Có Nguy Cơ Suy Giảm Tại Tam Anh
+                Cảnh Báo Thực Địa: Các Điểm Khảo Sát Bị Suy Giảm / Biến Mất
               </h3>
               <p className="text-xs text-rose-800">
-                Phát hiện dựa trên tần suất bắt gặp thực tế thấp và áp lực khai thác hoang dã tự do
+                Ghi nhận quần thể bị thu hẹp cá thể, sâu bệnh hoặc không còn tìm thấy tại vị trí khảo sát
               </p>
             </div>
           </div>
 
           <span className="text-xs font-bold px-3 py-1 rounded-full bg-rose-200 text-rose-900">
-            {decliningPlants.length} loài cần ưu tiên hành động
+            {decliningPlants.length} điểm cần lưu ý
           </span>
         </div>
 
         {/* List of declining herbs */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-          {decliningPlants.map((plant) => (
-            <div
-              key={plant.id}
-              onClick={() => onSelectPlant(plant)}
-              className="bg-white p-4 rounded-2xl border border-rose-200 shadow-2xs hover:shadow-md transition-all cursor-pointer space-y-2 group"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
-                  {plant.id}
-                </span>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
-                  {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}
-                </span>
-              </div>
+          {decliningPlants.map((plant) => {
+            const statusMeta = getPlantSurveyStatus(plant);
+            return (
+              <div
+                key={plant.id}
+                onClick={() => onSelectPlant(plant)}
+                className="bg-white p-4 rounded-2xl border border-rose-200 shadow-2xs hover:shadow-md transition-all cursor-pointer space-y-2 group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-stone-100 text-stone-700">
+                    {plant.id}
+                  </span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusMeta.badgeClass}`}>
+                    {statusMeta.emoji} {statusMeta.label}
+                  </span>
+                </div>
 
-              <div className="flex items-center gap-3">
-                <img
-                  src={plant.coverImage}
-                  alt={plant.vietnameseName}
-                  className="w-12 h-12 rounded-xl object-cover shrink-0 border border-stone-200"
-                />
-                <div>
-                  <h4 className="font-bold text-xs text-stone-900 group-hover:text-emerald-800 transition-colors">
-                    {plant.vietnameseName}
-                  </h4>
-                  <p className="text-[11px] text-stone-500 italic font-serif">
-                    {plant.scientificName}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <img
+                    src={plant.coverImage}
+                    alt={plant.vietnameseName}
+                    className="w-12 h-12 rounded-xl object-cover shrink-0 border border-stone-200"
+                  />
+                  <div>
+                    <h4 className="font-bold text-xs text-stone-900 group-hover:text-emerald-800 transition-colors">
+                      {plant.vietnameseName}
+                    </h4>
+                    <p className="text-[11px] text-stone-500 italic font-serif">
+                      {plant.scientificName}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-stone-600 bg-stone-50 p-2 rounded-xl border border-stone-100">
+                  <span className="font-semibold text-rose-900 block mb-0.5">Hiện trạng thực địa:</span>
+                  <p className="line-clamp-2">{plant.dataSource.notes || 'Số lượng cá thể rất ít hoặc đã suy thoái tại vị trí khảo sát này.'}</p>
                 </div>
               </div>
-
-              <div className="text-[11px] text-stone-600 bg-stone-50 p-2 rounded-xl border border-stone-100">
-                <span className="font-semibold text-rose-900 block mb-0.5">Tình trạng thực địa:</span>
-                <p className="line-clamp-2">{plant.dataSource.notes || 'Số lượng cá thể rất ít trong tự nhiên, cần nhân giống bảo tồn.'}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

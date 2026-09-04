@@ -686,19 +686,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {pendingMonitoringLogs.map(({ plant, log }) => {
                 let statusBadge = (
                   <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    🟢 Báo cáo: Còn tồn tại & Phát triển
+                    🟢 Báo cáo: An toàn
                   </span>
                 );
                 if (log.status === 'degraded') {
                   statusBadge = (
                     <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                      🟡 Báo cáo: Bị suy thoái
+                      🟡 Báo cáo: Bị suy giảm
                     </span>
                   );
                 } else if (log.status === 'disappeared') {
                   statusBadge = (
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-900 border border-rose-300">
-                      🔴 Báo cáo: Đã biến mất (Gỡ khỏi bản đồ)
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-100 text-stone-900 border border-stone-300">
+                      ⚫ Báo cáo: Biến mất (Lưu trữ điểm đã mất)
+                    </span>
+                  );
+                } else if (log.status === 'new') {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                      🟣 Báo cáo: Điểm mới
                     </span>
                   );
                 }

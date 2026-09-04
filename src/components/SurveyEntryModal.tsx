@@ -29,7 +29,8 @@ import {
   AICandidate,
   HABITAT_OPTIONS,
   COMMUNE_VILLAGES,
-  CommuneVillage
+  CommuneVillage,
+  getPlantSurveyStatus
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -92,15 +93,13 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [gpsStatusMsg, setGpsStatusMsg] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  // Conservation & Status
+  // Field Occurrence Status (4 states)
   const [conservationStatus, setConservationStatus] = useState<UnifiedConservationStatus>('An toàn');
   const [conservationLevel, setConservationLevel] = useState<ConservationLevel>('safe');
 
   const handleConservationStatusChange = (val: UnifiedConservationStatus) => {
     setConservationStatus(val);
-    if (val === 'Nguy cấp / Cần bảo tồn') {
-      setConservationLevel('endangered');
-    } else if (val === 'Sắp nguy cấp') {
+    if (val === 'Bị suy giảm') {
       setConservationLevel('vulnerable');
     } else {
       setConservationLevel('safe');
@@ -157,8 +156,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setRootsTrait(plant.identificationTraits?.roots || '');
     setHabitat(plant.habitat);
     setHabitatCategory(plant.habitatCategory);
-    setConservationStatus(plant.conservationStatus);
-    setConservationLevel(plant.conservationLevel);
+    const statusMeta = getPlantSurveyStatus(plant);
+    setConservationStatus(statusMeta.label as UnifiedConservationStatus);
+    setConservationLevel(statusMeta.key === 'degraded' ? 'vulnerable' : 'safe');
     setFolkRemediesText((plant.traditionalUses?.folkRemedies || []).join('\n'));
     setPartUsedText((plant.traditionalUses?.partUsed || []).join(', '));
     setPreparationText(plant.traditionalUses?.preparation || 'Rửa sạch phơi khô sắc nước uống');
@@ -202,7 +202,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       setLeavesTrait('');
       setFlowersAndFruitsTrait('');
       setRootsTrait('');
-      setConservationStatus('An toàn');
+      setConservationStatus(targetMode === 'new_species' ? 'Điểm mới' : 'An toàn');
       setConservationLevel('safe');
       setFolkRemediesText('');
       setPartUsedText('Thân cành và lá');
@@ -452,6 +452,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       },
       conservationStatus: conservationStatus,
       conservationLevel: conservationLevel,
+      occurrenceStatus: conservationStatus === 'Biến mất' ? 'disappeared' : conservationStatus === 'Bị suy giảm' ? 'degraded' : conservationStatus === 'Điểm mới' ? 'new' : 'present',
+      isDisappeared: conservationStatus === 'Biến mất',
       traditionalUses: {
         folkRemedies: remediesArray.length > 0 ? remediesArray : (basePlant?.traditionalUses.folkRemedies || ['Tư liệu dân gian đang được thẩm định thêm.']),
         partUsed: partsArray.length > 0 ? partsArray : (basePlant?.traditionalUses.partUsed || ['Lá', 'Thân']),
@@ -951,12 +953,12 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                 />
               </div>
 
-              {/* Unified Conservation Status Selector */}
+              {/* Unified Field Survey Occurrence Status Selector */}
               <div className="sm:col-span-2 bg-emerald-50/60 p-3.5 rounded-2xl border border-emerald-200/80">
                 <label className="block font-bold text-emerald-950 mb-1.5 flex items-center justify-between">
-                  <span>Trạng thái bảo tồn thực tế tại điểm khảo sát:</span>
+                  <span>Hiện trạng thực địa tại điểm khảo sát (04 trạng thái):</span>
                   <span className="text-[10px] font-normal text-emerald-800">
-                    Căn cứ mức độ phong phú & nguy cơ khai thác thực tế
+                    Ghi nhận chính xác tình trạng thực tế của cây tại điểm khảo sát
                   </span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -979,52 +981,52 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => handleConservationStatusChange('Sắp nguy cấp')}
+                    onClick={() => handleConservationStatusChange('Bị suy giảm')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Sắp nguy cấp'
+                      conservationStatus === 'Bị suy giảm'
                         ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
                         : 'bg-white text-stone-700 border-stone-200 hover:bg-amber-50/50'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🟡 Sắp nguy cấp</span>
+                      <span>🟡 Bị suy giảm</span>
                     </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Sắp nguy cấp' ? 'text-amber-100' : 'text-stone-500'}`}>
-                      Bị suy thoái / Quần thể thu hẹp
+                    <span className={`text-[10px] ${conservationStatus === 'Bị suy giảm' ? 'text-amber-100' : 'text-stone-500'}`}>
+                      Suy giảm cá thể / sâu bệnh
                     </span>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleConservationStatusChange('Nguy cấp / Cần bảo tồn')}
+                    onClick={() => handleConservationStatusChange('Biến mất')}
                     className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Nguy cấp / Cần bảo tồn'
-                        ? 'bg-rose-600 text-white border-rose-700 shadow-sm'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-rose-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🔴 Nguy cấp</span>
-                    </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Nguy cấp / Cần bảo tồn' ? 'text-rose-100' : 'text-stone-500'}`}>
-                      Rất quý hiếm, ưu tiên bảo tồn
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleConservationStatusChange('Đã biến mất')}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Đã biến mất'
+                      conservationStatus === 'Biến mất'
                         ? 'bg-stone-800 text-white border-stone-900 shadow-sm'
                         : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>⚫ Đã biến mất</span>
+                      <span>⚫ Biến mất</span>
                     </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Đã biến mất' ? 'text-stone-300' : 'text-stone-500'}`}>
+                    <span className={`text-[10px] ${conservationStatus === 'Biến mất' ? 'text-stone-300' : 'text-stone-500'}`}>
                       Không còn tìm thấy ở điểm này
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleConservationStatusChange('Điểm mới')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                      conservationStatus === 'Điểm mới'
+                        ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
+                        : 'bg-white text-stone-700 border-stone-200 hover:bg-purple-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span>🟣 Điểm mới</span>
+                    </div>
+                    <span className={`text-[10px] ${conservationStatus === 'Điểm mới' ? 'text-purple-100' : 'text-stone-500'}`}>
+                      Điểm khảo sát mới phát hiện
                     </span>
                   </button>
                 </div>

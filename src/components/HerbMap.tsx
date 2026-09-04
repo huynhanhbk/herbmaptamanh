@@ -68,13 +68,12 @@ export const HerbMap: React.FC<HerbMapProps> = ({
   const [pickedMarkerCoords, setPickedMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsNotification, setGpsNotification] = useState<string | null>(null);
 
-  // Calculate counts for each of the 5 unified survey statuses
+  // Calculate counts for each of the 4 field survey statuses
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: plants.length,
       safe: 0,
-      vulnerable: 0,
-      endangered: 0,
+      degraded: 0,
       disappeared: 0,
       new: 0,
     };
@@ -250,23 +249,13 @@ export const HerbMap: React.FC<HerbMapProps> = ({
           </svg>
         `;
         break;
-      case 'vulnerable':
-        // Alert Triangle SVG
+      case 'degraded':
+        // Alert Triangle SVG (Bị suy giảm)
         iconSvg = `
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
             <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
             <line x1="12" y1="9" x2="12" y2="13"/>
             <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-        `;
-        break;
-      case 'endangered':
-        // Shield Alert / Shield Danger SVG
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
         `;
         break;
@@ -529,7 +518,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
             </div>
           </div>
 
-          {/* Quick 5-Status Filter Pills Row (Always visible, uncluttered) */}
+          {/* Quick 4-Status Field Survey Filter Pills Row (Always visible, uncluttered) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
             <button
               onClick={() => setSelectedStatus('all')}
@@ -560,37 +549,22 @@ export const HerbMap: React.FC<HerbMapProps> = ({
               </span>
             </button>
 
-            {/* 2. Sắp nguy cấp (Gồm Suy thoái) */}
+            {/* 2. Bị suy giảm */}
             <button
-              onClick={() => setSelectedStatus('vulnerable')}
+              onClick={() => setSelectedStatus('degraded')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                selectedStatus === 'vulnerable'
+                selectedStatus === 'degraded'
                   ? 'bg-amber-600 text-white font-bold shadow-xs border border-amber-300 ring-1 ring-amber-300/40'
                   : 'text-amber-300 hover:bg-amber-950/80 bg-stone-800/80 border border-stone-700/60'
               }`}
             >
-              <span>🟡 Sắp nguy cấp</span>
+              <span>🟡 Bị suy giảm</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-200">
-                {statusCounts.vulnerable}
+                {statusCounts.degraded}
               </span>
             </button>
 
-            {/* 3. Nguy cấp / Cần bảo tồn */}
-            <button
-              onClick={() => setSelectedStatus('endangered')}
-              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                selectedStatus === 'endangered'
-                  ? 'bg-rose-700 text-white font-bold shadow-xs border border-rose-400 ring-1 ring-rose-300/40'
-                  : 'text-rose-300 hover:bg-rose-950/80 bg-stone-800/80 border border-stone-700/60'
-              }`}
-            >
-              <span>🔴 Nguy cấp</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-rose-950 text-rose-200">
-                {statusCounts.endangered}
-              </span>
-            </button>
-
-            {/* 4. Điểm đã mất */}
+            {/* 3. Biến mất */}
             <button
               onClick={() => setSelectedStatus('disappeared')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
@@ -599,13 +573,13 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                   : 'text-stone-400 hover:bg-stone-750 bg-stone-800/80 border border-stone-700/60'
               }`}
             >
-              <span>⚫ Đã mất</span>
+              <span>⚫ Biến mất</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-stone-900 text-stone-300">
                 {statusCounts.disappeared}
               </span>
             </button>
 
-            {/* 5. Điểm mới */}
+            {/* 4. Điểm mới */}
             <button
               onClick={() => setSelectedStatus('new')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
@@ -726,82 +700,6 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         >
           <Layers className="w-5 h-5 text-stone-700" />
         </button>
-      </div>
-
-      {/* Simple Clean Map Legend (Bottom left) */}
-      <div className="absolute bottom-4 left-3 z-10 select-none">
-        <div className="bg-stone-900/95 backdrop-blur-md px-4 py-3 rounded-2xl sm:rounded-3xl border border-stone-800 shadow-2xl text-stone-200 text-xs">
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-2.5 text-stone-100 font-bold text-xs tracking-wide">
-            <span className="w-4 h-4 rounded-full bg-emerald-500/20 border border-emerald-400 flex items-center justify-center text-emerald-400 text-[10px] font-bold">
-              i
-            </span>
-            <span>CHÚ GIẢI ĐIỂM KHẢO SÁT</span>
-          </div>
-
-          {/* Clean Status Items Grid */}
-          <div className="grid grid-cols-2 gap-x-5 gap-y-2 text-xs">
-            {/* An toàn */}
-            <div 
-              onClick={() => setSelectedStatus(selectedStatus === 'safe' ? 'all' : 'safe')}
-              className="flex items-center gap-2 cursor-pointer group transition-colors"
-              title="Nhấp để lọc điểm An toàn"
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-[#059669] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
-              <span className={`transition-colors ${selectedStatus === 'safe' ? 'text-emerald-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
-                An toàn
-              </span>
-            </div>
-
-            {/* Sắp nguy cấp */}
-            <div 
-              onClick={() => setSelectedStatus(selectedStatus === 'vulnerable' ? 'all' : 'vulnerable')}
-              className="flex items-center gap-2 cursor-pointer group transition-colors"
-              title="Nhấp để lọc điểm Sắp nguy cấp"
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-[#d97706] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
-              <span className={`transition-colors ${selectedStatus === 'vulnerable' ? 'text-amber-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
-                Sắp nguy cấp
-              </span>
-            </div>
-
-            {/* Nguy cấp / Cần bảo tồn */}
-            <div 
-              onClick={() => setSelectedStatus(selectedStatus === 'endangered' ? 'all' : 'endangered')}
-              className="flex items-center gap-2 cursor-pointer group transition-colors"
-              title="Nhấp để lọc điểm Nguy cấp / Cần bảo tồn"
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-[#e11d48] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
-              <span className={`transition-colors ${selectedStatus === 'endangered' ? 'text-rose-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
-                Nguy cấp / Cần bảo tồn
-              </span>
-            </div>
-
-            {/* Điểm mới (chờ duyệt) */}
-            <div 
-              onClick={() => setSelectedStatus(selectedStatus === 'new' ? 'all' : 'new')}
-              className="flex items-center gap-2 cursor-pointer group transition-colors"
-              title="Nhấp để lọc Điểm mới"
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-[#7c3aed] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
-              <span className={`transition-colors ${selectedStatus === 'new' ? 'text-purple-300 font-bold' : 'text-stone-300 group-hover:text-white'}`}>
-                Điểm mới (chờ duyệt)
-              </span>
-            </div>
-
-            {/* Điểm đã biến mất */}
-            <div 
-              onClick={() => setSelectedStatus(selectedStatus === 'disappeared' ? 'all' : 'disappeared')}
-              className="flex items-center gap-2 cursor-pointer group transition-colors col-span-2 sm:col-span-1"
-              title="Nhấp để lọc Điểm đã biến mất"
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-[#475569] border border-white shrink-0 shadow-xs group-hover:scale-110 transition-transform"></span>
-              <span className={`transition-colors ${selectedStatus === 'disappeared' ? 'text-stone-100 font-bold' : 'text-stone-400 group-hover:text-white'}`}>
-                Điểm đã biến mất
-              </span>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

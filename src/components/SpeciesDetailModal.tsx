@@ -2,10 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { QRCodeSVG, QRCodeCanvas } from 'qrcode.react';
 import { 
   MedicinalPlant, 
-  ConservationLevel,
   PlantMonitoringLog,
   PlantOccurrenceStatus,
-  getConservationStatusLabel
+  getPlantSurveyStatus
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 import { HerbMapLogo } from './HerbMapLogo';
@@ -97,7 +96,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
   if (!plant) return null;
 
-  const isDisappeared = plant.isDisappeared || plant.occurrenceStatus === 'disappeared';
+  const statusMeta = getPlantSurveyStatus(plant);
+  const isDisappeared = statusMeta.key === 'disappeared';
 
   // Sort logs by date descending
   const monitoringLogs = [...(plant.monitoringLogs || [])].sort(
@@ -205,7 +205,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
         <div className="text-left bg-stone-100/80 p-3 rounded-xl mb-4 text-xs space-y-1">
           <p>📍 <b>Vị trí:</b> {plant.location.addressDescription}</p>
           <p>🧭 <b>Tọa độ:</b> {plant.location.lat.toFixed(5)}, {plant.location.lng.toFixed(5)}</p>
-          <p>🛡️ <b>Tình trạng:</b> {getConservationStatusLabel(plant.conservationStatus || plant.conservationLevel)}</p>
+          <p>🌿 <b>Hiện trạng thực địa:</b> {statusMeta.emoji} {statusMeta.label}</p>
         </div>
 
         <div className="bg-amber-50 border border-amber-300 p-2.5 rounded-lg text-[10px] text-amber-900 font-medium">
@@ -299,20 +299,20 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
           )}
 
           {/* Degraded Alert Banner if latest status is degraded */}
-          {!isDisappeared && plant.occurrenceStatus === 'degraded' && (
+          {!isDisappeared && statusMeta.key === 'degraded' && (
             <div className="bg-amber-950/90 text-amber-100 p-4 rounded-2xl border-2 border-amber-500 flex items-start gap-3 shadow-md animate-fadeIn">
               <div className="p-2 rounded-xl bg-amber-900/80 text-amber-300 shrink-0 mt-0.5">
                 <AlertTriangle className="w-5 h-5 text-amber-300" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-white">CẢNH BÁO: QUẦN THỂ BỊ SUY THOÁI / SUY GIẢM SỐ LƯỢNG</span>
+                  <span className="font-bold text-sm text-white">CẢNH BÁO: QUẦN THỂ BỊ SUY GIẢM SỐ LƯỢNG NGOÀI THỰC ĐỊA</span>
                   <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-800 text-amber-200 border border-amber-600">
-                    Icon màu vàng cảnh báo trên Bản đồ
+                    Icon màu vàng trên Bản đồ
                   </span>
                 </div>
                 <p className="text-xs text-amber-200 leading-relaxed">
-                  Đợt kiểm tra mới nhất ghi nhận loài cây này đang bị suy giảm cá thể, sâu bệnh hoặc chịu tác động môi trường. Biểu tượng trên Bản đồ số được đổi sang màu vàng cảnh báo để thuận tiện cho công tác bảo tồn và theo dõi phục hồi.
+                  Đợt kiểm tra mới nhất ghi nhận loài cây này đang bị suy giảm cá thể ngoài thực địa. Biểu tượng trên Bản đồ số được hiển thị màu vàng để theo dõi và bảo vệ.
                 </p>
               </div>
             </div>
@@ -412,23 +412,9 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   </div>
                 )}
                 <div className="flex items-center justify-between">
-                  <span className="text-stone-500">Tình trạng bảo tồn thực địa:</span>
-                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
-                    isDisappeared
-                      ? 'bg-stone-200 text-stone-800 border border-stone-300'
-                      : plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
-                      ? 'bg-rose-100 text-rose-800 border border-rose-200' 
-                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.occurrenceStatus === 'degraded'
-                      ? 'bg-amber-100 text-amber-800 border border-amber-200' 
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                  }`}>
-                    {isDisappeared
-                      ? '⚫ Đã biến mất'
-                      : plant.conservationLevel === 'endangered' || plant.conservationStatus === 'Nguy cấp / Cần bảo tồn'
-                      ? '🔴 Nguy cấp / Cần bảo tồn'
-                      : plant.conservationLevel === 'vulnerable' || plant.conservationStatus === 'Sắp nguy cấp' || plant.occurrenceStatus === 'degraded'
-                      ? '🟡 Sắp nguy cấp (Bị suy thoái)'
-                      : '🟢 An toàn (Còn tồn tại & Phát triển)'}
+                  <span className="text-stone-500">Hiện trạng thực địa:</span>
+                  <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] ${statusMeta.badgeClass}`}>
+                    {statusMeta.emoji} {statusMeta.label}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -715,7 +701,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
                 <div>
                   <label className="block text-[11px] font-bold text-stone-700 mb-1.5">
-                    Tình trạng bảo tồn & xuất hiện tại tọa độ:
+                    Hiện trạng thực địa tại tọa độ khảo sát:
                   </label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
@@ -732,8 +718,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                         className="text-emerald-600 focus:ring-emerald-500"
                       />
                       <div className="text-[11px]">
-                        <span className="font-bold block">🟢 Còn tồn tại</span>
-                        <span className="text-[10px] text-stone-500">Phát triển tốt/bình thường</span>
+                        <span className="font-bold block">🟢 An toàn</span>
+                        <span className="text-[10px] text-stone-500">Phát triển tốt, ổn định</span>
                       </div>
                     </label>
 
@@ -751,8 +737,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                         className="text-amber-600 focus:ring-amber-500"
                       />
                       <div className="text-[11px]">
-                        <span className="font-bold block">🟡 Bị suy thoái</span>
-                        <span className="text-[10px] text-stone-500">Suy giảm cá thể/sâu bệnh</span>
+                        <span className="font-bold block">🟡 Bị suy giảm</span>
+                        <span className="text-[10px] text-stone-500">Suy giảm cá thể / sâu bệnh</span>
                       </div>
                     </label>
 
@@ -770,9 +756,9 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                         className="text-rose-600 focus:ring-rose-500"
                       />
                       <div className="text-[11px]">
-                        <span className="font-bold block">🔴 Đã biến mất</span>
-                        <span className="text-[10px] text-rose-600 font-semibold">
-                          {isAdmin ? 'Tự động gỡ khỏi bản đồ' : 'Báo cáo gỡ khỏi bản đồ'}
+                        <span className="font-bold block">⚫ Biến mất</span>
+                        <span className="text-[10px] text-stone-600 font-semibold">
+                          {isAdmin ? 'Lưu trữ vào điểm đã mất' : 'Báo cáo cây đã mất'}
                         </span>
                       </div>
                     </label>
@@ -863,16 +849,20 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
                     let dotColor = 'bg-emerald-500 ring-emerald-200';
                     let badgeBg = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                    let statusTitle = 'Còn tồn tại & Phát triển';
+                    let statusTitle = '🟢 An toàn';
 
                     if (log.status === 'disappeared') {
-                      dotColor = 'bg-rose-600 ring-rose-200';
-                      badgeBg = 'bg-rose-100 text-rose-800 border-rose-300';
-                      statusTitle = 'Đã biến mất tại vị trí';
+                      dotColor = 'bg-stone-600 ring-stone-200';
+                      badgeBg = 'bg-stone-100 text-stone-800 border-stone-300';
+                      statusTitle = '⚫ Biến mất khỏi thực địa';
                     } else if (log.status === 'degraded') {
                       dotColor = 'bg-amber-500 ring-amber-200';
                       badgeBg = 'bg-amber-100 text-amber-800 border-amber-200';
-                      statusTitle = 'Suy thoái / Suy giảm cá thể';
+                      statusTitle = '🟡 Bị suy giảm';
+                    } else if (log.status === 'new') {
+                      dotColor = 'bg-purple-500 ring-purple-200';
+                      badgeBg = 'bg-purple-100 text-purple-800 border-purple-200';
+                      statusTitle = '🟣 Điểm mới';
                     }
 
                     if (isPending) {

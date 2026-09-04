@@ -468,7 +468,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
-                <span>Thống kê bảo tồn</span>
+                <span>Thống kê thực địa</span>
               </button>
 
               <button

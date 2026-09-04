@@ -76,22 +76,23 @@ export function getHabitatLabel(cat: HabitatCategory | string): string {
 
 export type ConservationLevel = 'safe' | 'vulnerable' | 'endangered';
 
-export type UnifiedConservationStatus = 'An toàn' | 'Sắp nguy cấp' | 'Nguy cấp / Cần bảo tồn' | 'Đã biến mất';
+export type UnifiedConservationStatus = 'An toàn' | 'Bị suy giảm' | 'Biến mất' | 'Điểm mới' | 'Sắp nguy cấp' | 'Nguy cấp / Cần bảo tồn' | 'Đã biến mất';
 
 export type PlantOccurrenceStatus = 
-  | 'present'       // Còn tồn tại / Đang phát triển tốt
-  | 'degraded'      // Bị suy thoái / Suy giảm số lượng (thuộc nhóm Sắp nguy cấp)
-  | 'disappeared';  // Đã biến mất / Không còn tìm thấy tại tọa độ này
+  | 'safe'          // An toàn / Còn tồn tại & sinh trưởng tốt
+  | 'present'       // Còn tồn tại (tương đương safe)
+  | 'degraded'      // Bị suy giảm số lượng, suy thoái cá thể
+  | 'disappeared'   // Biến mất / Không còn tìm thấy tại tọa độ này
+  | 'new';          // Điểm mới
 
 /**
- * 5 Unified Survey Point Statuses:
- * 1. safe: An toàn (Green / Emerald)
- * 2. vulnerable: Sắp nguy cấp (Amber / Yellow - bao gồm cả trạng thái Suy thoái)
- * 3. endangered: Nguy cấp / Cần bảo tồn (Rose / Red)
- * 4. disappeared: Điểm đã mất (Dark Stone / Slate)
- * 5. new: Điểm mới (Purple / Violet - Chờ duyệt)
+ * 04 Trạng thái Hiện trạng thực địa được khảo sát theo yêu cầu dự án:
+ * 1. safe: An toàn (Màu xanh lục)
+ * 2. degraded: Bị suy giảm (Màu vàng cam)
+ * 3. disappeared: Biến mất (Màu xám đen)
+ * 4. new: Điểm mới (Màu tím)
  */
-export type SurveyPointStatusKey = 'safe' | 'vulnerable' | 'endangered' | 'disappeared' | 'new';
+export type SurveyPointStatusKey = 'safe' | 'degraded' | 'disappeared' | 'new';
 
 export interface SurveyPointStatusMeta {
   key: SurveyPointStatusKey;
@@ -112,7 +113,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   safe: {
     key: 'safe',
     label: 'An toàn',
-    subLabel: 'Còn tồn tại & phát triển',
+    subLabel: 'Sinh trưởng tốt, ổn định',
     colorHex: '#059669',
     bgClass: 'bg-emerald-600',
     textClass: 'text-emerald-700',
@@ -121,40 +122,26 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
     markerBg: 'bg-emerald-600',
     markerRing: 'ring-emerald-400/60',
     emoji: '🟢',
-    description: 'Quần thể cây thuốc sinh trưởng tốt, trữ lượng ổn định, phổ biến ngoài thực địa.',
+    description: 'Quần thể cây thuốc sinh trưởng tốt, trữ lượng ổn định ngoài thực địa.',
   },
-  vulnerable: {
-    key: 'vulnerable',
-    label: 'Sắp nguy cấp',
-    subLabel: 'Bị suy thoái / Suy giảm cá thể',
+  degraded: {
+    key: 'degraded',
+    label: 'Bị suy giảm',
+    subLabel: 'Cá thể thưa thớt, suy giảm',
     colorHex: '#d97706',
     bgClass: 'bg-amber-500',
-    textClass: 'text-amber-700',
+    textClass: 'text-amber-800',
     borderClass: 'border-amber-500',
     badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
     markerBg: 'bg-amber-500',
     markerRing: 'ring-amber-400/60',
     emoji: '🟡',
-    description: 'Quần thể bị suy thoái, suy giảm số lượng hoặc có nguy cơ cạn kiệt nếu khai thác quá mức.',
-  },
-  endangered: {
-    key: 'endangered',
-    label: 'Nguy cấp / Cần bảo tồn',
-    subLabel: 'Quý hiếm, nguy cơ biến mất cao',
-    colorHex: '#e11d48',
-    bgClass: 'bg-rose-600',
-    textClass: 'text-rose-700',
-    borderClass: 'border-rose-500',
-    badgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
-    markerBg: 'bg-rose-600',
-    markerRing: 'ring-rose-400/60',
-    emoji: '🔴',
-    description: 'Loài dược liệu quý hiếm trong Sách Đỏ, cá thể ít, cần ưu tiên nhân giống và bảo vệ nghiêm ngặt.',
+    description: 'Quần thể bị suy giảm số lượng cá thể hoặc suy thoái sinh cảnh ngoài thực địa.',
   },
   disappeared: {
     key: 'disappeared',
-    label: 'Đã biến mất',
-    subLabel: 'Đã mất tại điểm thực địa',
+    label: 'Biến mất',
+    subLabel: 'Không còn tìm thấy tại điểm này',
     colorHex: '#475569',
     bgClass: 'bg-stone-600',
     textClass: 'text-stone-700',
@@ -163,11 +150,11 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
     markerBg: 'bg-stone-600',
     markerRing: 'ring-stone-400/60',
     emoji: '⚫',
-    description: 'Điểm khảo sát trước đây nay cây đã bị mất hoặc không còn tại tọa độ này (tạm ẩn trên bản đồ chính).',
+    description: 'Điểm khảo sát đã biến mất hoặc không còn tìm thấy cây tại tọa độ này.',
   },
   new: {
     key: 'new',
-    label: 'Mới ghi nhận',
+    label: 'Điểm mới',
     subLabel: 'Mới khảo sát / Chờ duyệt',
     colorHex: '#7c3aed',
     bgClass: 'bg-purple-600',
@@ -177,17 +164,16 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
     markerBg: 'bg-purple-600',
     markerRing: 'ring-purple-400/60',
     emoji: '🟣',
-    description: 'Điểm khảo sát mới được cộng đồng đóng góp, đang chờ Ban Quản trị phê duyệt thông tin.',
+    description: 'Điểm khảo sát mới được ghi nhận bổ sung hoặc do cộng đồng đóng góp.',
   },
 };
 
 /**
- * Resolves any plant into exactly one of the 5 unified survey statuses:
- * 1. 'disappeared' if isDisappeared or occurrenceStatus is 'disappeared' or conservationStatus is 'Đã biến mất'
- * 2. 'new' if status is 'pending'
- * 3. 'endangered' if conservationLevel is 'endangered' or conservationStatus is 'Nguy cấp / Cần bảo tồn'
- * 4. 'vulnerable' if conservationLevel is 'vulnerable' OR conservationStatus is 'Sắp nguy cấp' OR occurrenceStatus is 'degraded' (Suy thoái)
- * 5. 'safe' otherwise
+ * Phân định chính xác 04 trạng thái hiện trạng thực địa:
+ * 1. 'new': Điểm mới (chờ duyệt hoặc mới ghi nhận)
+ * 2. 'disappeared': Biến mất (isDisappeared hoặc occurrenceStatus là disappeared)
+ * 3. 'degraded': Bị suy giảm (occurrenceStatus là degraded, hoặc dữ liệu ghi nhận suy thoái)
+ * 4. 'safe': An toàn (mặc định)
  */
 export function getPlantSurveyStatus(plant: {
   status?: string;
@@ -195,32 +181,34 @@ export function getPlantSurveyStatus(plant: {
   conservationStatus?: string;
   occurrenceStatus?: string;
   isDisappeared?: boolean;
+  isNewPoint?: boolean;
 }): SurveyPointStatusMeta {
+  // 1. Điểm mới
+  if (plant.status === 'pending' || (plant as any).isNewPoint) {
+    return SURVEY_POINT_STATUS_CONFIG.new;
+  }
+  // 2. Biến mất
   if (
     plant.isDisappeared || 
     plant.occurrenceStatus === 'disappeared' || 
     plant.conservationStatus === 'Đã biến mất' ||
+    plant.conservationStatus === 'Biến mất' ||
     plant.conservationLevel === ('disappeared' as any)
   ) {
     return SURVEY_POINT_STATUS_CONFIG.disappeared;
   }
-  if (plant.status === 'pending') {
-    return SURVEY_POINT_STATUS_CONFIG.new;
-  }
-  // Check vulnerable / Sắp nguy cấp first to avoid overlapping with endangered keywords
+  // 3. Bị suy giảm
   if (
+    plant.occurrenceStatus === 'degraded' ||
+    plant.conservationStatus === 'Bị suy giảm' ||
     plant.conservationStatus === 'Sắp nguy cấp' ||
-    plant.conservationLevel === 'vulnerable' || 
-    plant.occurrenceStatus === 'degraded'
-  ) {
-    return SURVEY_POINT_STATUS_CONFIG.vulnerable;
-  }
-  if (
     plant.conservationStatus === 'Nguy cấp / Cần bảo tồn' ||
+    plant.conservationLevel === 'vulnerable' || 
     plant.conservationLevel === 'endangered'
   ) {
-    return SURVEY_POINT_STATUS_CONFIG.endangered;
+    return SURVEY_POINT_STATUS_CONFIG.degraded;
   }
+  // 4. An toàn
   return SURVEY_POINT_STATUS_CONFIG.safe;
 }
 
@@ -246,25 +234,23 @@ export function getConservationStatusLabel(
   isDisappeared?: boolean,
   occurrenceStatus?: string
 ): UnifiedConservationStatus {
-  if (isDisappeared || occurrenceStatus === 'disappeared') return 'Đã biến mất';
+  if (isDisappeared || occurrenceStatus === 'disappeared') return 'Biến mất';
   if (!statusOrLevel) return 'An toàn';
   const str = String(statusOrLevel).trim().toLowerCase();
   if (str.includes('biến mất') || str.includes('disappeared') || str.includes('đã mất') || str.includes('bien mat')) {
-    return 'Đã biến mất';
+    return 'Biến mất';
   }
-  // IMPORTANT: Must check 'sắp nguy cấp' / 'vulnerable' / 'suy thoái' BEFORE 'nguy cấp' because 'sắp nguy cấp' contains 'nguy cấp'!
+  if (str.includes('mới') || str === 'new' || str === 'pending') {
+    return 'Điểm mới';
+  }
   if (
+    str.includes('suy giảm') ||
     str.includes('sắp nguy cấp') || 
     str.includes('sap nguy cap') || 
     str.includes('vulnerable') || 
     str.includes('suy thoái') || 
     str.includes('suy thoai') || 
     str.includes('degraded') || 
-    str === 'vu'
-  ) {
-    return 'Sắp nguy cấp';
-  }
-  if (
     str.includes('nguy cấp') || 
     str.includes('nguy cap') || 
     str.includes('cần bảo tồn') || 
@@ -272,10 +258,11 @@ export function getConservationStatusLabel(
     str.includes('sách đỏ') || 
     str.includes('sach do') || 
     str.includes('endangered') || 
+    str === 'vu' ||
     str === 'en' || 
     str === 'cr'
   ) {
-    return 'Nguy cấp / Cần bảo tồn';
+    return 'Bị suy giảm';
   }
   return 'An toàn';
 }

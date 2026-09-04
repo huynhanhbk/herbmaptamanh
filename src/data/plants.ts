@@ -173,8 +173,9 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Thôn Trà Lý',
       elevationMeters: 85,
     },
-    conservationStatus: 'Nguy cấp / Cần bảo tồn',
-    conservationLevel: 'endangered',
+    conservationStatus: 'Bị suy giảm',
+    conservationLevel: 'vulnerable',
+    occurrenceStatus: 'degraded',
     traditionalUses: {
       folkRemedies: [
         'Dân gian dùng ngâm rượu bồi bổ sinh lực, tăng sức bền cho người lao động nặng.',
@@ -288,8 +289,9 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Thôn Xuân Ngọc',
       elevationMeters: 38,
     },
-    conservationStatus: 'Sắp nguy cấp',
+    conservationStatus: 'Bị suy giảm',
     conservationLevel: 'vulnerable',
+    occurrenceStatus: 'degraded',
     traditionalUses: {
       folkRemedies: [
         'Dân gian dùng hãm nước uống hỗ trợ hạ đường huyết và giảm cảm giác thèm ngọt.',
@@ -402,8 +404,10 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Thôn Mỹ Sơn',
       elevationMeters: 55,
     },
-    conservationStatus: 'Nguy cấp / Cần bảo tồn',
-    conservationLevel: 'endangered',
+    conservationStatus: 'Biến mất',
+    conservationLevel: 'safe',
+    occurrenceStatus: 'disappeared',
+    isDisappeared: true,
     traditionalUses: {
       folkRemedies: [
         'Bổ máu, dùng cho người xanh xao, thiếu máu, suy nhược cơ thể.',
@@ -574,8 +578,9 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       communeSection: 'Thôn Phú Vinh',
       elevationMeters: 62,
     },
-    conservationStatus: 'Sắp nguy cấp',
-    conservationLevel: 'vulnerable',
+    conservationStatus: 'Điểm mới',
+    conservationLevel: 'safe',
+    occurrenceStatus: 'new',
     traditionalUses: {
       folkRemedies: [
         'Vỏ thân sắc uống giúp tăng lực, chữa mỏi gối, nhức xương và kích thích ăn ngon.',
