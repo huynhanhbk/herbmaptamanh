@@ -25,7 +25,8 @@ import {
   COMMUNE_VILLAGES,
   CommuneVillage,
   getConservationStatusLabel,
-  getPlantSurveyStatus
+  getPlantSurveyStatus,
+  getPlantGenus
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -45,10 +46,12 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   if (!isOpen || !plant) return null;
 
   // Form states initialized with plant values
+  const [family, setFamily] = useState(plant.family);
+  const [genus, setGenus] = useState(getPlantGenus(plant));
+  const [species, setSpecies] = useState(plant.species || '');
   const [vietnameseName, setVietnameseName] = useState(plant.vietnameseName);
   const [otherNamesStr, setOtherNamesStr] = useState((plant.otherNames || []).join(', '));
   const [scientificName, setScientificName] = useState(plant.scientificName);
-  const [family, setFamily] = useState(plant.family);
   const [coverImage, setCoverImage] = useState(plant.coverImage);
   const [shortDescription, setShortDescription] = useState(plant.shortDescription || '');
   
@@ -84,22 +87,26 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   const [informantName, setInformantName] = useState(plant.traditionalUses?.informantName || 'Lương y & Nhân dân xã Tam Anh');
   const [informantRole, setInformantRole] = useState(plant.traditionalUses?.informantRole || 'Người dân bản địa');
 
-  // Status & Field Occurrence (Unified 4 Options: An toàn | Bị suy giảm | Biến mất | Điểm mới)
+  // Status & Field Occurrence (Unified 3 Options: Đã ghi nhận | Biến mất | Điểm mới (Chờ duyệt))
   const initialUnifiedStatus: UnifiedConservationStatus = plant 
     ? (getPlantSurveyStatus(plant).label as UnifiedConservationStatus) 
-    : 'An toàn';
+    : 'Đã ghi nhận';
 
   const [unifiedStatus, setUnifiedStatus] = useState<UnifiedConservationStatus>(initialUnifiedStatus);
   const [status, setStatus] = useState<'verified' | 'pending'>(plant.status);
   const [surveyor, setSurveyor] = useState(plant.dataSource?.surveyor || '');
+  const [surveyorAddress, setSurveyorAddress] = useState(plant.dataSource?.surveyorAddress || '');
+  const [surveyorPhone, setSurveyorPhone] = useState(plant.dataSource?.surveyorPhone || '');
 
   // Reset all form states whenever plant or modal opens
   useEffect(() => {
     if (plant) {
+      setFamily(plant.family || '');
+      setGenus(getPlantGenus(plant));
+      setSpecies(plant.species || '');
       setVietnameseName(plant.vietnameseName || '');
       setOtherNamesStr((plant.otherNames || []).join(', '));
       setScientificName(plant.scientificName || '');
-      setFamily(plant.family || '');
       setCoverImage(plant.coverImage || '');
       setShortDescription(plant.shortDescription || '');
       setGrowthForm(plant.identificationTraits?.growthForm || 'Thân thảo');
@@ -124,6 +131,8 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       setUnifiedStatus(st);
       setStatus(plant.status || 'verified');
       setSurveyor(plant.dataSource?.surveyor || '');
+      setSurveyorAddress(plant.dataSource?.surveyorAddress || '');
+      setSurveyorPhone(plant.dataSource?.surveyorPhone || '');
       setValidationError(null);
       setIsConfirmOpen(false);
     }
@@ -190,42 +199,40 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     const parsedLat = parseFloat(lat);
     const parsedLng = parseFloat(lng);
 
-    let conservationLevel: ConservationLevel = 'safe';
+    const conservationLevel: ConservationLevel = 'safe';
     let occurrenceStatus: PlantOccurrenceStatus = 'present';
     let isDisappeared = false;
 
-    if (unifiedStatus === 'Biến mất') {
+    const finalUnifiedStatus: UnifiedConservationStatus =
+      status === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)' ? 'Đã ghi nhận' : unifiedStatus;
+
+    if (finalUnifiedStatus === 'Biến mất') {
       occurrenceStatus = 'disappeared';
       isDisappeared = true;
-      conservationLevel = 'safe';
-    } else if (unifiedStatus === 'Bị suy giảm') {
-      conservationLevel = 'vulnerable';
-      occurrenceStatus = 'degraded';
-      isDisappeared = false;
-    } else if (unifiedStatus === 'Điểm mới') {
-      conservationLevel = 'safe';
+    } else if (finalUnifiedStatus === 'Điểm mới (Chờ duyệt)') {
       occurrenceStatus = 'new';
       isDisappeared = false;
     } else {
-      conservationLevel = 'safe';
       occurrenceStatus = 'present';
       isDisappeared = false;
     }
 
     const updatedData: Partial<MedicinalPlant> = {
+      family: family.trim() || 'Chưa phân loại',
+      genus: genus.trim() || getPlantGenus({ scientificName: scientificName.trim() }),
+      species: species.trim() || undefined,
       vietnameseName: vietnameseName.trim(),
       otherNames: otherNamesStr.split(',').map((s) => s.trim()).filter(Boolean),
-      scientificName: scientificName.trim(),
-      family: family.trim(),
+      scientificName: scientificName.trim() || 'Đang xác minh phân loại học',
       coverImage: coverImage.trim(),
       shortDescription: shortDescription.trim(),
       habitatCategory,
       habitat: habitat.trim(),
-      conservationStatus: unifiedStatus,
+      conservationStatus: finalUnifiedStatus,
       conservationLevel,
       occurrenceStatus,
       isDisappeared,
-      status,
+      status: finalUnifiedStatus === 'Điểm mới (Chờ duyệt)' ? 'pending' : status,
       identificationTraits: {
         growthForm: growthForm.trim(),
         leaves: leaves.trim(),
@@ -251,6 +258,8 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       dataSource: {
         ...plant.dataSource,
         surveyor: surveyor.trim() || plant.dataSource.surveyor,
+        surveyorAddress: surveyorAddress.trim() || undefined,
+        surveyorPhone: surveyorPhone.trim() || undefined,
         verifiedBy: status === 'verified' ? 'Ban Chuyên môn KHKT Tam Anh' : undefined,
       },
     };
@@ -354,7 +363,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Tên tiếng Việt phổ thông <span className="text-rose-500">*</span>:
+                    1. Tên cây thuốc (Tên tiếng Việt) <span className="text-rose-500">*</span>:
                   </label>
                   <input
                     type="text"
@@ -367,13 +376,13 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Tên gọi khác / Tên dân gian địa phương:
+                    Tên gọi dân gian khác (cách nhau dấu phẩy):
                   </label>
                   <input
                     type="text"
                     value={otherNamesStr}
                     onChange={(e) => setOtherNamesStr(e.target.value)}
-                    placeholder="Phân cách bằng dấu phẩy, ví dụ: Cà quạnh, Cà cườm"
+                    placeholder="Ví dụ: Cà quánh, Cà cườm"
                     className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
                   />
                 </div>
@@ -382,27 +391,53 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Tên khoa học (In nghiêng) <span className="text-rose-500">*</span>:
-                  </label>
-                  <input
-                    type="text"
-                    value={scientificName}
-                    onChange={(e) => setScientificName(e.target.value)}
-                    required
-                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 font-serif italic"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Họ thực vật <span className="text-rose-500">*</span>:
+                    2. Họ thực vật:
                   </label>
                   <input
                     type="text"
                     value={family}
                     onChange={(e) => setFamily(e.target.value)}
-                    required
                     className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    3. Chi thực vật:
+                  </label>
+                  <input
+                    type="text"
+                    value={genus}
+                    onChange={(e) => setGenus(e.target.value)}
+                    placeholder="Ví dụ: Chi Solanum"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    4. Loài thực vật:
+                  </label>
+                  <input
+                    type="text"
+                    value={species}
+                    onChange={(e) => setSpecies(e.target.value)}
+                    placeholder="Ví dụ: Cà gai leo / Solanum procumbens"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    5. Tên khoa học (In nghiêng):
+                  </label>
+                  <input
+                    type="text"
+                    value={scientificName}
+                    onChange={(e) => setScientificName(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 font-serif italic"
                   />
                 </div>
               </div>
@@ -453,25 +488,33 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 />
               </div>
 
-              {/* Status Control */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80">
+              {/* Status Control & Surveyor Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
                 <div>
                   <label className="block font-bold text-amber-950 mb-1">
                     Trạng thái kiểm duyệt KHKT:
                   </label>
                   <select
                     value={status}
-                    onChange={(e) => setStatus(e.target.value as 'verified' | 'pending')}
+                    onChange={(e) => {
+                      const next = e.target.value as 'verified' | 'pending';
+                      setStatus(next);
+                      if (next === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)') {
+                        setUnifiedStatus('Đã ghi nhận');
+                      } else if (next === 'pending' && unifiedStatus === 'Đã ghi nhận') {
+                        setUnifiedStatus('Điểm mới (Chờ duyệt)');
+                      }
+                    }}
                     className="w-full p-2.5 rounded-xl border border-amber-300 bg-white font-semibold text-amber-900"
                   >
-                    <option value="verified">✅ Đã xác nhận khoa học (Xuất bản bản đồ)</option>
+                    <option value="verified">✅ Đã xác nhận khoa học (Chuyển sang Đã ghi nhận)</option>
                     <option value="pending">⏳ Chờ duyệt bổ sung thực địa</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-bold text-amber-950 mb-1">
-                    Người thực hiện khảo sát / Cập nhật:
+                    Họ tên người khảo sát / Nhóm nghiên cứu:
                   </label>
                   <input
                     type="text"
@@ -479,6 +522,32 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                     onChange={(e) => setSurveyor(e.target.value)}
                     placeholder="Nhóm tác giả đề tài KHKT Tam Anh"
                     className="w-full p-2.5 rounded-xl border border-amber-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-amber-950 mb-1">
+                    Địa chỉ người khảo sát:
+                  </label>
+                  <input
+                    type="text"
+                    value={surveyorAddress}
+                    onChange={(e) => setSurveyorAddress(e.target.value)}
+                    placeholder="Thôn Đức Bố, xã Tam Anh..."
+                    className="w-full p-2.5 rounded-xl border border-amber-300 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-amber-950 mb-1">
+                    Số điện thoại / Zalo người khảo sát:
+                  </label>
+                  <input
+                    type="text"
+                    value={surveyorPhone}
+                    onChange={(e) => setSurveyorPhone(e.target.value)}
+                    placeholder="0912345678"
+                    className="w-full p-2.5 rounded-xl border border-amber-300 bg-white font-mono"
                   />
                 </div>
               </div>
@@ -632,56 +701,32 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 </select>
               </div>
 
-              {/* Field Occurrence Status (04 States) */}
+              {/* Field Occurrence Status (03 States) */}
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Hiện trạng thực địa khảo sát (04 trạng thái):
+                  Hiện trạng thực địa khảo sát (03 trạng thái):
                 </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'An toàn' 
+                    unifiedStatus === 'Đã ghi nhận' 
                       ? 'bg-emerald-50/90 border-emerald-500 text-emerald-950 ring-2 ring-emerald-400 shadow-xs' 
                       : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                   }`}>
                     <input
                       type="radio"
                       name="modalUnifiedStatus"
-                      value="An toàn"
-                      checked={unifiedStatus === 'An toàn'}
-                      onChange={() => setUnifiedStatus('An toàn')}
+                      value="Đã ghi nhận"
+                      checked={unifiedStatus === 'Đã ghi nhận'}
+                      onChange={() => setUnifiedStatus('Đã ghi nhận')}
                       className="mt-0.5 text-emerald-600 focus:ring-emerald-500"
                     />
                     <div>
                       <span className="font-bold text-xs flex items-center gap-1 text-emerald-800">
                         <span>🟢</span>
-                        <span>An toàn</span>
+                        <span>Đã ghi nhận</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Còn tồn tại & phát triển bình thường ngoài tự nhiên/vườn nhà.
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'Bị suy giảm' 
-                      ? 'bg-amber-50/90 border-amber-500 text-amber-950 ring-2 ring-amber-400 shadow-xs' 
-                      : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="modalUnifiedStatus"
-                      value="Bị suy giảm"
-                      checked={unifiedStatus === 'Bị suy giảm'}
-                      onChange={() => setUnifiedStatus('Bị suy giảm')}
-                      className="mt-0.5 text-amber-600 focus:ring-amber-500"
-                    />
-                    <div>
-                      <span className="font-bold text-xs flex items-center gap-1 text-amber-800">
-                        <span>🟡</span>
-                        <span>Bị suy giảm</span>
-                      </span>
-                      <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Quần thể bị suy giảm cá thể / suy thoái / sâu bệnh ngoài thực địa.
+                        Đã ghi nhận phân bố tại điểm khảo sát ngoài thực địa.
                       </span>
                     </div>
                   </label>
@@ -711,25 +756,25 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                   </label>
 
                   <label className={`p-3 rounded-2xl border flex items-start gap-2.5 cursor-pointer transition-all ${
-                    unifiedStatus === 'Điểm mới' 
+                    unifiedStatus === 'Điểm mới (Chờ duyệt)' 
                       ? 'bg-purple-50/90 border-purple-500 text-purple-950 ring-2 ring-purple-400 shadow-xs' 
                       : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
                   }`}>
                     <input
                       type="radio"
                       name="modalUnifiedStatus"
-                      value="Điểm mới"
-                      checked={unifiedStatus === 'Điểm mới'}
-                      onChange={() => setUnifiedStatus('Điểm mới')}
+                      value="Điểm mới (Chờ duyệt)"
+                      checked={unifiedStatus === 'Điểm mới (Chờ duyệt)'}
+                      onChange={() => setUnifiedStatus('Điểm mới (Chờ duyệt)')}
                       className="mt-0.5 text-purple-600 focus:ring-purple-500"
                     />
                     <div>
                       <span className="font-bold text-xs flex items-center gap-1 text-purple-800">
                         <span>🟣</span>
-                        <span>Điểm mới</span>
+                        <span>Điểm mới (Chờ duyệt)</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Điểm mới khảo sát / Ghi nhận phát hiện mới tại địa bàn.
+                        Điểm mới khảo sát / Ghi nhận phát hiện mới chờ duyệt.
                       </span>
                     </div>
                   </label>
@@ -899,14 +944,12 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 <span className="text-stone-500">Hiện trạng thực địa:</span>
                 <span className={`px-2.5 py-0.5 rounded-full font-bold text-[11px] border ${
                   unifiedStatus === 'Biến mất' ? 'bg-stone-200 text-stone-800 border-stone-300' :
-                  unifiedStatus === 'Bị suy giảm' ? 'bg-amber-100 text-amber-800 border-amber-300' :
-                  unifiedStatus === 'Điểm mới' ? 'bg-purple-100 text-purple-800 border-purple-300' :
+                  unifiedStatus === 'Điểm mới (Chờ duyệt)' ? 'bg-purple-100 text-purple-800 border-purple-300' :
                   'bg-emerald-100 text-emerald-800 border-emerald-300'
                 }`}>
-                  {unifiedStatus === 'An toàn' && '🟢 An toàn'}
-                  {unifiedStatus === 'Bị suy giảm' && '🟡 Bị suy giảm'}
+                  {unifiedStatus === 'Đã ghi nhận' && '🟢 Đã ghi nhận'}
                   {unifiedStatus === 'Biến mất' && '⚫ Biến mất'}
-                  {unifiedStatus === 'Điểm mới' && '🟣 Điểm mới'}
+                  {unifiedStatus === 'Điểm mới (Chờ duyệt)' && '🟣 Điểm mới (Chờ duyệt)'}
                 </span>
               </div>
               <div className="flex justify-between">

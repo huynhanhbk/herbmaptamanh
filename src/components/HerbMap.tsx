@@ -68,12 +68,11 @@ export const HerbMap: React.FC<HerbMapProps> = ({
   const [pickedMarkerCoords, setPickedMarkerCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsNotification, setGpsNotification] = useState<string | null>(null);
 
-  // Calculate counts for each of the 4 field survey statuses
+  // Calculate counts for each of the 3 field survey statuses
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {
       all: plants.length,
-      safe: 0,
-      degraded: 0,
+      recorded: 0,
       disappeared: 0,
       new: 0,
     };
@@ -225,12 +224,10 @@ export const HerbMap: React.FC<HerbMapProps> = ({
   }, [mapTileLayer]);
 
   /**
-   * Create custom marker icon strictly following the 5 unified survey statuses:
-   * 1. safe: Emerald Green with Leaf SVG
-   * 2. vulnerable: Amber Yellow with Alert Triangle SVG (includes degraded)
-   * 3. endangered: Rose Red with Shield Alert SVG
-   * 4. disappeared: Dark Stone with X SVG
-   * 5. new: Violet Purple with Sparkles/Star SVG
+   * Create custom marker icon strictly following the 3 unified survey statuses:
+   * 1. recorded (Đã ghi nhận): Emerald Green with Leaf SVG
+   * 2. disappeared (Biến mất): Dark Stone with X SVG
+   * 3. new (Điểm mới (Chờ duyệt)): Violet Purple with Sparkles/Star SVG
    */
   const createHerbIcon = (plant: MedicinalPlant, isSelected: boolean) => {
     const statusMeta = getPlantSurveyStatus(plant);
@@ -240,22 +237,12 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     let iconSvg = '';
     switch (statusMeta.key) {
-      case 'safe':
+      case 'recorded':
         // Clean Leaf SVG
         iconSvg = `
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
             <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
-          </svg>
-        `;
-        break;
-      case 'degraded':
-        // Alert Triangle SVG (Bị suy giảm)
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
         `;
         break;
@@ -518,7 +505,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
             </div>
           </div>
 
-          {/* Quick 4-Status Field Survey Filter Pills Row (Always visible, uncluttered) */}
+          {/* Quick 3-Status Field Survey Filter Pills Row */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
             <button
               onClick={() => setSelectedStatus('all')}
@@ -534,37 +521,22 @@ export const HerbMap: React.FC<HerbMapProps> = ({
               </span>
             </button>
 
-            {/* 1. An toàn */}
+            {/* 1. Đã ghi nhận */}
             <button
-              onClick={() => setSelectedStatus('safe')}
+              onClick={() => setSelectedStatus('recorded')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                selectedStatus === 'safe'
+                selectedStatus === 'recorded'
                   ? 'bg-emerald-700 text-white font-bold shadow-xs border border-emerald-400 ring-1 ring-emerald-300/40'
                   : 'text-emerald-300 hover:bg-emerald-950/80 bg-stone-800/80 border border-stone-700/60'
               }`}
             >
-              <span>🟢 An toàn</span>
+              <span>🟢 Đã ghi nhận</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-emerald-950 text-emerald-200">
-                {statusCounts.safe}
+                {statusCounts.recorded}
               </span>
             </button>
 
-            {/* 2. Bị suy giảm */}
-            <button
-              onClick={() => setSelectedStatus('degraded')}
-              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
-                selectedStatus === 'degraded'
-                  ? 'bg-amber-600 text-white font-bold shadow-xs border border-amber-300 ring-1 ring-amber-300/40'
-                  : 'text-amber-300 hover:bg-amber-950/80 bg-stone-800/80 border border-stone-700/60'
-              }`}
-            >
-              <span>🟡 Bị suy giảm</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-amber-950 text-amber-200">
-                {statusCounts.degraded}
-              </span>
-            </button>
-
-            {/* 3. Biến mất */}
+            {/* 2. Biến mất */}
             <button
               onClick={() => setSelectedStatus('disappeared')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
@@ -579,7 +551,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
               </span>
             </button>
 
-            {/* 4. Điểm mới */}
+            {/* 3. Điểm mới (Chờ duyệt) */}
             <button
               onClick={() => setSelectedStatus('new')}
               className={`px-2.5 py-1 rounded-xl text-[11px] font-medium whitespace-nowrap transition-all flex items-center gap-1 ${
@@ -588,7 +560,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
                   : 'text-purple-300 hover:bg-purple-950/80 bg-stone-800/80 border border-stone-700/60'
               }`}
             >
-              <span>🟣 Điểm mới</span>
+              <span>🟣 Điểm mới (Chờ duyệt)</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded font-mono bg-purple-950 text-purple-200">
                 {statusCounts.new}
               </span>

@@ -19,7 +19,12 @@ import {
   ChevronDown,
   ChevronUp,
   Tag,
-  RotateCcw
+  RotateCcw,
+  Plus,
+  Trash2,
+  Star,
+  Image as ImageIcon,
+  Link2
 } from 'lucide-react';
 import { 
   MedicinalPlant, 
@@ -27,10 +32,12 @@ import {
   ConservationLevel, 
   UnifiedConservationStatus,
   AICandidate,
+  PlantPhoto,
   HABITAT_OPTIONS,
   COMMUNE_VILLAGES,
   CommuneVillage,
-  getPlantSurveyStatus
+  getPlantSurveyStatus,
+  getPlantGenus
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
 import { compressImageFile } from '../utils/imageCompressor';
@@ -60,20 +67,28 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   existingPlants,
 }) => {
   // Mode: Surveying an existing species in DB vs Adding a completely new species
-  const [entryMode, setEntryMode] = useState<'existing_species' | 'new_species'>('existing_species');
-  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string>('TA-HERB-001');
+  const [entryMode, setEntryMode] = useState<'existing_species' | 'new_species'>('new_species');
+  const [selectedSpeciesId, setSelectedSpeciesId] = useState<string>('');
   const [speciesSearchQuery, setSpeciesSearchQuery] = useState('');
   const [isSpeciesDropdownOpen, setIsSpeciesDropdownOpen] = useState(false);
   const [showStandardTraits, setShowStandardTraits] = useState(false);
 
-  // Form states
-  const [vietnameseName, setVietnameseName] = useState('');
-  const [otherNames, setOtherNames] = useState('');
+  // Form states (1. Tên cây thuốc (Tên gọi dân gian khác) -> 2. Họ -> 3. Chi -> 4. Loài -> 5. Tên khoa học)
+  const [plantNameInput, setPlantNameInput] = useState('');
+  const [family, setFamily] = useState('');
+  const [genus, setGenus] = useState('');
+  const [speciesInput, setSpeciesInput] = useState('');
   const [scientificName, setScientificName] = useState('');
-  const [family, setFamily] = useState('Chưa xác định');
-  const [coverImage, setCoverImage] = useState<string>(
-    'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'
-  );
+
+  // Multiple photo attachments state
+  const DEFAULT_COVER_IMAGE =
+    'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
+  const [attachedPhotos, setAttachedPhotos] = useState<PlantPhoto[]>([]);
+  const [coverPhotoId, setCoverPhotoId] = useState<string>('');
+  const [photoUrlInput, setPhotoUrlInput] = useState<string>('');
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [isCompressingPhotos, setIsCompressingPhotos] = useState(false);
+
   const [shortDescription, setShortDescription] = useState('');
   
   // Botanical traits (4 Unified Fields)
@@ -86,25 +101,12 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [habitat, setHabitat] = useState('Bờ rào & nương đồi ven làng');
   const [habitatCategory, setHabitatCategory] = useState<HabitatCategory>('garden');
   const [communeSection, setCommuneSection] = useState<CommuneVillage>('Thôn Đức Bố');
-  const [addressDescription, setAddressDescription] = useState('Thôn Đức Bố, xã Tam Anh');
+  const [addressDescription, setAddressDescription] = useState('');
   const [lat, setLat] = useState<number>(15.4635);
   const [lng, setLng] = useState<number>(108.6185);
   const [isGettingGPS, setIsGettingGPS] = useState(false);
   const [gpsStatusMsg, setGpsStatusMsg] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
-
-  // Field Occurrence Status (4 states)
-  const [conservationStatus, setConservationStatus] = useState<UnifiedConservationStatus>('An toàn');
-  const [conservationLevel, setConservationLevel] = useState<ConservationLevel>('safe');
-
-  const handleConservationStatusChange = (val: UnifiedConservationStatus) => {
-    setConservationStatus(val);
-    if (val === 'Bị suy giảm') {
-      setConservationLevel('vulnerable');
-    } else {
-      setConservationLevel('safe');
-    }
-  };
 
   // Folk remedies & Informant
   const [folkRemediesText, setFolkRemediesText] = useState('');
@@ -114,9 +116,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [informantRole, setInformantRole] = useState('');
   const [hasConsent, setHasConsent] = useState(true);
 
-  // Surveyor info
-  const [surveyor, setSurveyor] = useState('Nhóm nghiên cứu KHKT Trường THCS Nguyễn Khuyến');
-  const [surveyTitle, setSurveyTitle] = useState('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
+  // Surveyor info (4. Người khảo sát và hồ sơ thực địa)
+  const [surveyor, setSurveyor] = useState('');
+  const [surveyorAddress, setSurveyorAddress] = useState('');
+  const [surveyorPhone, setSurveyorPhone] = useState('');
 
   // Ref to track if modal reopened due to map coordinate picking
   const isReturningFromMapPickRef = useRef(false);
@@ -134,86 +137,153 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     return Array.from(map.values()).sort((a, b) => a.vietnameseName.localeCompare(b.vietnameseName, 'vi'));
   }, [existingPlants, isOpen]);
 
-  // Selected existing plant object
+  // Unique families list (sorted)
+  const availableFamilies = useMemo(() => {
+    const set = new Set<string>();
+    uniqueSpeciesList.forEach((p) => {
+      if (p.family && p.family.trim()) set.add(p.family.trim());
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [uniqueSpeciesList]);
+
+  // Unique genera list for datalist suggestions
+  const availableGenera = useMemo(() => {
+    const set = new Set<string>();
+    uniqueSpeciesList.forEach((p) => {
+      const g = getPlantGenus(p);
+      if (g && g !== 'Chưa xác định') set.add(g);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [uniqueSpeciesList]);
+
+  // Selected existing plant object (only when explicitly selected)
   const selectedExistingPlant = useMemo(() => {
-    return uniqueSpeciesList.find((p) => p.id === selectedSpeciesId) || uniqueSpeciesList[0] || null;
+    if (!selectedSpeciesId) return null;
+    return uniqueSpeciesList.find((p) => p.id === selectedSpeciesId) || null;
   }, [uniqueSpeciesList, selectedSpeciesId]);
 
-  // Helper to load an existing plant's botanical data
+  // Active cover image URL preview
+  const activeCoverImage = useMemo(() => {
+    if (attachedPhotos.length > 0) {
+      const found = attachedPhotos.find((p) => p.id === coverPhotoId);
+      return found ? found.url : attachedPhotos[0].url;
+    }
+    if (selectedExistingPlant?.coverImage) {
+      return selectedExistingPlant.coverImage;
+    }
+    return DEFAULT_COVER_IMAGE;
+  }, [attachedPhotos, coverPhotoId, selectedExistingPlant]);
+
+  // Parse "Tên cây thuốc (Tên gọi dân gian khác)"
+  const parsePlantNameAndAliases = (raw: string): { mainName: string; aliases: string[] } => {
+    const trimmed = raw.trim();
+    const match = trimmed.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (match) {
+      const main = match[1].trim();
+      const aliases = match[2]
+        .split(/[,;]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return { mainName: main || trimmed, aliases };
+    }
+    return { mainName: trimmed, aliases: [] };
+  };
+
+  // Helper to load an existing plant's botanical data into the 5 fields
   const applyExistingPlant = (plant: MedicinalPlant) => {
+    setEntryMode('existing_species');
     setSelectedSpeciesId(plant.id);
-    setVietnameseName(plant.vietnameseName);
-    setOtherNames((plant.otherNames || []).join(', '));
-    setScientificName(plant.scientificName);
-    setFamily(plant.family);
-    setCoverImage(plant.coverImage);
-    setShortDescription(plant.shortDescription);
+    const aliases = (plant.otherNames || []).filter(Boolean);
+    setPlantNameInput(aliases.length > 0 ? `${plant.vietnameseName} (${aliases.join(', ')})` : plant.vietnameseName);
+    setFamily(plant.family || '');
+    setGenus(getPlantGenus(plant) !== 'Chưa xác định' ? getPlantGenus(plant) : '');
+    setSpeciesInput(plant.species || plant.vietnameseName || '');
+    setScientificName(plant.scientificName || '');
+    setShortDescription(plant.shortDescription || '');
     setGrowthForm(plant.identificationTraits?.growthForm || '');
     setLeavesTrait(plant.identificationTraits?.leaves || '');
     const flw = plant.identificationTraits?.flowers || '';
     const frt = plant.identificationTraits?.fruits || '';
     setFlowersAndFruitsTrait(flw ? (frt && !flw.includes(frt) ? `${flw} — ${frt}` : flw) : frt);
     setRootsTrait(plant.identificationTraits?.roots || '');
-    setHabitat(plant.habitat);
-    setHabitatCategory(plant.habitatCategory);
-    const statusMeta = getPlantSurveyStatus(plant);
-    setConservationStatus(statusMeta.label as UnifiedConservationStatus);
-    setConservationLevel(statusMeta.key === 'degraded' ? 'vulnerable' : 'safe');
+    setHabitat(plant.habitat || 'Bờ rào & nương đồi ven làng');
+    setHabitatCategory(plant.habitatCategory || 'garden');
     setFolkRemediesText((plant.traditionalUses?.folkRemedies || []).join('\n'));
     setPartUsedText((plant.traditionalUses?.partUsed || []).join(', '));
     setPreparationText(plant.traditionalUses?.preparation || 'Rửa sạch phơi khô sắc nước uống');
   };
 
+  // Clear selected CSDL plant to enter freely
+  const handleClearSelectedExistingPlant = () => {
+    setEntryMode('new_species');
+    setSelectedSpeciesId('');
+    setPlantNameInput('');
+    setFamily('');
+    setGenus('');
+    setSpeciesInput('');
+    setScientificName('');
+    setShortDescription('');
+    setGrowthForm('');
+    setLeavesTrait('');
+    setFlowersAndFruitsTrait('');
+    setRootsTrait('');
+    setFolkRemediesText('');
+    setPartUsedText('Thân cành và lá');
+    setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
+    setShowStandardTraits(false);
+    setValidationError(null);
+  };
+
   // Full reset function for a brand new survey
-  const resetFormToDefault = (targetMode: 'existing_species' | 'new_species' = 'existing_species') => {
-    setEntryMode(targetMode);
+  const resetFormToDefault = () => {
+    setEntryMode('new_species');
+    setSelectedSpeciesId('');
     setSpeciesSearchQuery('');
     setIsSpeciesDropdownOpen(false);
     setShowStandardTraits(false);
     setValidationError(null);
     setGpsStatusMsg(null);
     setIsGettingGPS(false);
+    setAttachedPhotos([]);
+    setCoverPhotoId('');
+    setPhotoUrlInput('');
+    setPhotoError(null);
 
-    // Reset survey field location & informants to fresh baseline
+    // Clear Section 1 fields so required field #1 must be filled explicitly
+    setPlantNameInput('');
+    setFamily('');
+    setGenus('');
+    setSpeciesInput('');
+    setScientificName('');
+    setShortDescription('');
+    setGrowthForm('');
+    setLeavesTrait('');
+    setFlowersAndFruitsTrait('');
+    setRootsTrait('');
+
+    // Reset Section 2 & 3
     setHabitat('Bờ rào & nương đồi ven làng');
     setHabitatCategory('garden');
     setCommuneSection('Thôn Đức Bố');
     setAddressDescription('');
     setLat(15.4635);
     setLng(108.6185);
+    setFolkRemediesText('');
+    setPartUsedText('Thân cành và lá');
+    setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
     setInformantName('Người dân am hiểu cây thuốc bản địa');
     setInformantRole('');
     setHasConsent(true);
-    setSurveyor('Nhóm nghiên cứu KHKT Trường THCS Nguyễn Khuyến');
-    setSurveyTitle('Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026');
 
-    if (targetMode === 'existing_species' && uniqueSpeciesList.length > 0) {
-      const defaultPlant = uniqueSpeciesList[0];
-      applyExistingPlant(defaultPlant);
-    } else {
-      setSelectedSpeciesId('');
-      setVietnameseName('');
-      setOtherNames('');
-      setScientificName('');
-      setFamily('Chưa xác định');
-      setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
-      setShortDescription('');
-      setGrowthForm('');
-      setLeavesTrait('');
-      setFlowersAndFruitsTrait('');
-      setRootsTrait('');
-      setConservationStatus(targetMode === 'new_species' ? 'Điểm mới' : 'An toàn');
-      setConservationLevel('safe');
-      setFolkRemediesText('');
-      setPartUsedText('Thân cành và lá');
-      setPreparationText('Rửa sạch phơi khô nấu nước uống hoặc giã tươi');
-    }
+    // Reset Section 4 (Surveyor)
+    setSurveyor('');
+    setSurveyorAddress('');
+    setSurveyorPhone('');
   };
 
   // Handle modal lifecycle & prefilling
   useEffect(() => {
     if (!isOpen) {
-      // When modal is closed without map picking active, reset map pick flag
       return;
     }
 
@@ -239,22 +309,33 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         );
       });
 
+      const initialPhotos: PlantPhoto[] = prefillData.imageBase64
+        ? [
+            {
+              id: `photo-ai-${Date.now()}`,
+              url: prefillData.imageBase64,
+              caption: `Ảnh thực địa ${prefillData.candidate.vietnameseName || 'cây thuốc'}`,
+              type: 'whole',
+            },
+          ]
+        : [];
+      setAttachedPhotos(initialPhotos);
+      setCoverPhotoId(initialPhotos[0]?.id || '');
+
       if (matched) {
-        setEntryMode('existing_species');
         applyExistingPlant(matched);
-        if (prefillData.imageBase64) {
-          setCoverImage(prefillData.imageBase64);
-        }
       } else {
         setEntryMode('new_species');
         setSelectedSpeciesId('');
-        setVietnameseName(prefillData.candidate.vietnameseName || '');
-        setOtherNames('');
+        const aiOther = prefillData.candidate.otherNames ? ` (${prefillData.candidate.otherNames})` : '';
+        setPlantNameInput(`${prefillData.candidate.vietnameseName || ''}${aiOther}`.trim());
+        setFamily(prefillData.candidate.family || '');
+        const inferredGenus =
+          prefillData.candidate.genus ||
+          getPlantGenus({ scientificName: prefillData.candidate.scientificName });
+        setGenus(inferredGenus !== 'Chưa xác định' ? inferredGenus : '');
+        setSpeciesInput(prefillData.candidate.vietnameseName || '');
         setScientificName(prefillData.candidate.scientificName || '');
-        setFamily(prefillData.candidate.family || 'Chưa xác định');
-        if (prefillData.imageBase64) {
-          setCoverImage(prefillData.imageBase64);
-        }
         setShortDescription(prefillData.candidate.observedFeatures?.join(', ') || '');
         setGrowthForm('');
         setLeavesTrait(prefillData.candidate.observedFeatures?.join(', ') || '');
@@ -267,13 +348,13 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
           setHabitat(prefillData.candidate.habitatInCentralVietnam);
         }
         setCommuneSection('Thôn Đức Bố');
-        setAddressDescription('Thôn Đức Bố, xã Tam Anh');
+        setAddressDescription('');
         setLat(15.4635);
         setLng(108.6185);
       }
     } else {
-      // Fresh new survey: Reset all form fields to default!
-      resetFormToDefault('existing_species');
+      // Fresh new survey: Reset all form fields cleanly
+      resetFormToDefault();
     }
   }, [isOpen, prefillData]);
 
@@ -285,25 +366,29 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     }
   }, [pickedCoords]);
 
-  // Filtered species in dropdown
+  // Filtered species by search query for optional quick-pick from CSDL
   const filteredSpecies = useMemo(() => {
     if (!speciesSearchQuery.trim()) return uniqueSpeciesList;
     const q = speciesSearchQuery.toLowerCase();
-    return uniqueSpeciesList.filter(
-      (p) =>
+    return uniqueSpeciesList.filter((p) => {
+      return (
         p.vietnameseName.toLowerCase().includes(q) ||
+        (p.otherNames || []).some((n) => n.toLowerCase().includes(q)) ||
         p.scientificName.toLowerCase().includes(q) ||
         p.id.toLowerCase().includes(q) ||
-        p.family.toLowerCase().includes(q)
-    );
+        p.family.toLowerCase().includes(q) ||
+        getPlantGenus(p).toLowerCase().includes(q)
+      );
+    });
   }, [uniqueSpeciesList, speciesSearchQuery]);
 
-  // Check if current name matches any existing species while typing in new_species mode
+  // Auto-detect existing species match while typing field #1
   const autoDetectedExistingMatch = useMemo(() => {
-    if (entryMode !== 'new_species' || !vietnameseName.trim()) return null;
-    const name = vietnameseName.trim().toLowerCase();
-    return uniqueSpeciesList.find((p) => p.vietnameseName.trim().toLowerCase() === name);
-  }, [entryMode, vietnameseName, uniqueSpeciesList]);
+    if (selectedExistingPlant || !plantNameInput.trim()) return null;
+    const { mainName } = parsePlantNameAndAliases(plantNameInput);
+    const norm = mainName.trim().toLowerCase();
+    return uniqueSpeciesList.find((p) => p.vietnameseName.trim().toLowerCase() === norm) || null;
+  }, [selectedExistingPlant, plantNameInput, uniqueSpeciesList]);
 
   if (!isOpen) return null;
 
@@ -341,64 +426,125 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     onTriggerMapPickCoords();
   };
 
-  // Handle switching to existing species mode
-  const handleSwitchToExistingSpecies = () => {
-    setEntryMode('existing_species');
-    const plant = selectedExistingPlant || uniqueSpeciesList[0];
-    if (plant) {
-      applyExistingPlant(plant);
+  // Handle multiple photo file uploads with compression (max 8 photos)
+  const MAX_PHOTOS = 8;
+  const handleMultiplePhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files: File[] = e.target.files ? Array.from<File>(e.target.files) : [];
+    if (files.length === 0) return;
+
+    setPhotoError(null);
+    const remainingSlots = MAX_PHOTOS - attachedPhotos.length;
+    if (remainingSlots <= 0) {
+      setPhotoError(`Chỉ đính kèm tối đa ${MAX_PHOTOS} ảnh cho mỗi phiếu khảo sát.`);
+      e.target.value = '';
+      return;
     }
-  };
 
-  // Handle switching to new species mode
-  const handleSwitchToNewSpecies = () => {
-    setEntryMode('new_species');
-    setSelectedSpeciesId('');
-    setVietnameseName('');
-    setOtherNames('');
-    setScientificName('');
-    setFamily('Chưa xác định');
-    setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
-    setShortDescription('');
-    setGrowthForm('');
-    setLeavesTrait('');
-    setFlowersAndFruitsTrait('');
-    setRootsTrait('');
-    setFolkRemediesText('');
-    setPartUsedText('');
-    setPreparationText('');
-    setValidationError(null);
-  };
+    const filesToProcess = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setPhotoError(`Chỉ thêm được ${remainingSlots} ảnh nữa (tối đa ${MAX_PHOTOS} ảnh/phiếu).`);
+    }
 
-  // Handle Photo upload with automatic compression
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+    setIsCompressingPhotos(true);
     try {
-      const compressed = await compressImageFile(file, 1200, 1200, 0.78);
-      setCoverImage(compressed);
-    } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setCoverImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const processed: PlantPhoto[] = [];
+      for (let i = 0; i < filesToProcess.length; i++) {
+        const file = filesToProcess[i];
+        let url = '';
+        try {
+          url = await compressImageFile(file, 900, 900, 0.72);
+        } catch {
+          url = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
+        processed.push({
+          id: `photo-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+          url,
+          caption: `Ảnh thực địa ${attachedPhotos.length + i + 1}`,
+          type: 'whole',
+        });
+      }
+
+      setAttachedPhotos((prev) => {
+        const next = [...prev, ...processed];
+        if (!coverPhotoId && next.length > 0) {
+          setCoverPhotoId(next[0].id);
+        }
+        return next;
+      });
+    } finally {
+      setIsCompressingPhotos(false);
+      e.target.value = '';
     }
+  };
+
+  // Add photo by URL
+  const handleAddPhotoUrl = () => {
+    const trimmed = photoUrlInput.trim();
+    if (!trimmed) return;
+    setPhotoError(null);
+    if (attachedPhotos.length >= MAX_PHOTOS) {
+      setPhotoError(`Chỉ đính kèm tối đa ${MAX_PHOTOS} ảnh cho mỗi phiếu khảo sát.`);
+      return;
+    }
+    const newPhoto: PlantPhoto = {
+      id: `photo-url-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      url: trimmed,
+      caption: `Ảnh thực địa ${attachedPhotos.length + 1}`,
+      type: 'whole',
+    };
+    setAttachedPhotos((prev) => {
+      const next = [...prev, newPhoto];
+      if (!coverPhotoId) setCoverPhotoId(newPhoto.id);
+      return next;
+    });
+    setPhotoUrlInput('');
+  };
+
+  const handleUpdatePhotoMeta = (id: string, patch: Partial<PlantPhoto>) => {
+    setAttachedPhotos((prev) => prev.map((ph) => (ph.id === id ? { ...ph, ...patch } : ph)));
+  };
+
+  const handleRemovePhoto = (id: string) => {
+    setAttachedPhotos((prev) => {
+      const next = prev.filter((ph) => ph.id !== id);
+      if (coverPhotoId === id) {
+        setCoverPhotoId(next[0]?.id || '');
+      }
+      return next;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setValidationError(null);
 
-    const plantName = entryMode === 'existing_species' && selectedExistingPlant 
-      ? selectedExistingPlant.vietnameseName 
-      : vietnameseName.trim();
-
-    if (!plantName) {
-      setValidationError('Vui lòng chọn hoặc nhập tên cây thuốc.');
+    if (!plantNameInput.trim()) {
+      setValidationError('Vui lòng điền Tên cây thuốc (Tên gọi dân gian khác).');
       return;
     }
+
+    if (!surveyor.trim()) {
+      setValidationError('Vui lòng nhập Họ tên người khảo sát / Nhóm nghiên cứu.');
+      return;
+    }
+
+    if (!surveyorPhone.trim()) {
+      setValidationError('Vui lòng nhập Số điện thoại / Zalo người khảo sát.');
+      return;
+    }
+
+    const digitsOnly = surveyorPhone.replace(/[\s.-]/g, '');
+    if (!/\d{8,15}/.test(digitsOnly)) {
+      setValidationError('Số điện thoại / Zalo chưa hợp lệ (cần tối thiểu 8 chữ số).');
+      return;
+    }
+
+    const { mainName, aliases } = parsePlantNameAndAliases(plantNameInput);
+    const plantName = mainName;
 
     const remediesArray = folkRemediesText
       .split('\n')
@@ -411,69 +557,98 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       .filter((p) => p.length > 0);
 
     // If surveying an existing plant, preserve its exact ID (e.g. TA-HERB-001)
-    const explicitId = entryMode === 'existing_species' && selectedExistingPlant 
-      ? selectedExistingPlant.id 
-      : autoDetectedExistingMatch 
-      ? autoDetectedExistingMatch.id 
-      : undefined;
+    const matchedPlant = selectedExistingPlant || autoDetectedExistingMatch || null;
+    const explicitId = matchedPlant ? matchedPlant.id : undefined;
 
-    const basePlant = entryMode === 'existing_species' && selectedExistingPlant ? selectedExistingPlant : null;
+    const resolvedCover = activeCoverImage;
 
-    const newRecord: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string } = {
-      id: explicitId,
-      vietnameseName: basePlant ? basePlant.vietnameseName : vietnameseName.trim(),
-      otherNames: basePlant ? basePlant.otherNames : (otherNames ? otherNames.split(',').map((s) => s.trim()) : []),
-      scientificName: basePlant ? basePlant.scientificName : (scientificName.trim() || 'Đang xác minh phân loại học'),
-      family: basePlant ? basePlant.family : (family.trim() || 'Chưa phân loại'),
-      coverImage: coverImage || (basePlant ? basePlant.coverImage : 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'),
-      photos: [
+    // Order attachedPhotos so cover photo is first
+    let finalPhotos: PlantPhoto[] = [];
+    if (attachedPhotos.length > 0) {
+      const coverItem = attachedPhotos.find((p) => p.id === coverPhotoId) || attachedPhotos[0];
+      const others = attachedPhotos.filter((p) => p.id !== coverItem.id);
+      finalPhotos = [coverItem, ...others].map((p, idx) => ({
+        ...p,
+        caption: p.caption?.trim() || `Mẫu thực địa ${plantName} (${idx + 1})`,
+      }));
+    } else {
+      finalPhotos = [
         {
           id: `photo-${Date.now()}`,
-          url: coverImage,
-          caption: `Mẫu thực địa ${plantName} tại ${addressDescription}`,
+          url: resolvedCover,
+          caption: `Mẫu thực địa ${plantName} tại ${addressDescription || communeSection}`,
           type: 'whole',
         },
-      ],
-      shortDescription: shortDescription.trim() || (basePlant ? basePlant.shortDescription : `Cây thuốc ghi nhận tại ${addressDescription}, xã Tam Anh.`),
+      ];
+    }
+
+    const resolvedFamily = family.trim() || matchedPlant?.family || 'Chưa phân loại';
+    const resolvedScientificName =
+      scientificName.trim() || matchedPlant?.scientificName || 'Đang xác minh phân loại học';
+    const resolvedGenus =
+      genus.trim() ||
+      (matchedPlant ? getPlantGenus(matchedPlant) : getPlantGenus({ scientificName: resolvedScientificName }));
+    const resolvedSpecies = speciesInput.trim() || matchedPlant?.species || undefined;
+    const resolvedOtherNames =
+      aliases.length > 0 ? aliases : matchedPlant?.otherNames || [];
+
+    // Default status for EVERY new survey is always "Điểm mới (Chờ duyệt)" until Admin approves
+    const newRecord: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string } = {
+      id: explicitId,
+      vietnameseName: matchedPlant ? matchedPlant.vietnameseName : plantName,
+      otherNames: resolvedOtherNames,
+      scientificName: resolvedScientificName,
+      family: resolvedFamily,
+      genus: resolvedGenus,
+      species: resolvedSpecies,
+      coverImage: resolvedCover,
+      photos: finalPhotos,
+      shortDescription:
+        shortDescription.trim() ||
+        (matchedPlant
+          ? matchedPlant.shortDescription
+          : `Cây thuốc ghi nhận tại ${addressDescription || communeSection}, xã Tam Anh.`),
       identificationTraits: {
-        growthForm: growthForm.trim() || basePlant?.identificationTraits?.growthForm || 'Cây thảo / cây bụi tự nhiên.',
-        leaves: leavesTrait.trim() || basePlant?.identificationTraits?.leaves || 'Đang cập nhật tiêu bản lá.',
-        flowers: flowersAndFruitsTrait.trim() || basePlant?.identificationTraits?.flowers || 'Chưa quan sát thấy hoa / quả tại thời điểm khảo sát.',
+        growthForm: growthForm.trim() || matchedPlant?.identificationTraits?.growthForm || 'Cây thảo / cây bụi tự nhiên.',
+        leaves: leavesTrait.trim() || matchedPlant?.identificationTraits?.leaves || 'Đang cập nhật tiêu bản lá.',
+        flowers: flowersAndFruitsTrait.trim() || matchedPlant?.identificationTraits?.flowers || 'Chưa quan sát thấy hoa / quả tại thời điểm khảo sát.',
         fruits: '',
-        roots: rootsTrait.trim() || basePlant?.identificationTraits?.roots || 'Chưa đào lấy củ rễ để bảo tồn sinh thái.',
+        roots: rootsTrait.trim() || matchedPlant?.identificationTraits?.roots || 'Chưa đào lấy củ rễ để bảo tồn sinh thái.',
       },
-      habitat: habitat.trim(),
+      habitat: habitat.trim() || 'Bờ rào & nương đồi ven làng',
       habitatCategory: habitatCategory,
       location: {
         lat: Number(lat),
         lng: Number(lng),
-        addressDescription: addressDescription.trim(),
+        addressDescription: addressDescription.trim() || `${communeSection}, xã Tam Anh`,
         communeSection: communeSection,
       },
-      conservationStatus: conservationStatus,
-      conservationLevel: conservationLevel,
-      occurrenceStatus: conservationStatus === 'Biến mất' ? 'disappeared' : conservationStatus === 'Bị suy giảm' ? 'degraded' : conservationStatus === 'Điểm mới' ? 'new' : 'present',
-      isDisappeared: conservationStatus === 'Biến mất',
+      conservationStatus: 'Điểm mới (Chờ duyệt)',
+      conservationLevel: 'safe',
+      occurrenceStatus: 'new',
+      isDisappeared: false,
       traditionalUses: {
-        folkRemedies: remediesArray.length > 0 ? remediesArray : (basePlant?.traditionalUses.folkRemedies || ['Tư liệu dân gian đang được thẩm định thêm.']),
-        partUsed: partsArray.length > 0 ? partsArray : (basePlant?.traditionalUses.partUsed || ['Lá', 'Thân']),
-        preparation: preparationText.trim() || (basePlant?.traditionalUses.preparation || 'Rửa sạch phơi khô sắc nước uống'),
+        folkRemedies: remediesArray.length > 0 ? remediesArray : (matchedPlant?.traditionalUses.folkRemedies || ['Tư liệu dân gian đang được thẩm định thêm.']),
+        partUsed: partsArray.length > 0 ? partsArray : (matchedPlant?.traditionalUses.partUsed || ['Lá', 'Thân']),
+        preparation: preparationText.trim() || (matchedPlant?.traditionalUses.preparation || 'Rửa sạch phơi khô sắc nước uống'),
         informantName: informantName.trim(),
         informantRole: informantRole.trim(),
         hasConsent: hasConsent,
       },
       dataSource: {
         type: 'field_survey_2026',
-        title: surveyTitle.trim(),
+        title: 'Khảo sát bổ sung thực địa cây thuốc Tam Anh 2026',
         surveyor: surveyor.trim(),
+        surveyorAddress: surveyorAddress.trim() || undefined,
+        surveyorPhone: surveyorPhone.trim(),
         surveyDate: new Date().toISOString().split('T')[0],
-        verifiedBy: isAdmin ? 'Ban Quản Trị Hệ Thống' : undefined,
+        verifiedBy: undefined,
       },
-      status: isAdmin ? 'verified' : 'pending',
+      status: 'pending',
     };
 
     onSaveNewPlant(newRecord, explicitId);
-    resetFormToDefault('existing_species');
+    resetFormToDefault();
     onClose();
   };
 
@@ -506,326 +681,434 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         <form onSubmit={handleSubmit} className="overflow-y-auto p-4 sm:p-6 space-y-6 text-stone-800 text-xs">
           
           {/* Scientific Review & Verification Info */}
-          <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-2xl flex items-center justify-between gap-3 text-emerald-950">
+          <div className="bg-purple-50 border border-purple-200 p-3 rounded-2xl flex items-center justify-between gap-3 text-purple-950">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-purple-700 shrink-0" />
               <span>
-                <b>Quy trình số hóa thực địa:</b> Phiếu ghi nhận sẽ được hiển thị ngay trên Bản đồ số và đưa vào danh sách <b>"Chờ duyệt"</b> để Hội đồng KHKT thẩm định.
+                <b>Quy trình kiểm duyệt thực địa:</b> Mọi phiếu khảo sát mới sau khi lưu sẽ có trạng thái mặc định là <b>🟣 Điểm mới (Chờ duyệt)</b>. Sau khi Quản trị viên xác nhận thông tin cung cấp là đúng và bấm duyệt phiếu, trạng thái cây sẽ chuyển sang <b>🟢 Đã ghi nhận</b>.
               </span>
-            </div>
-            {isAdmin && (
-              <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-700 text-white shrink-0">
-                Admin (Tự động duyệt)
-              </span>
-            )}
-          </div>
-
-          {/* MODE SELECTOR: Surveying Existing Species vs New Species */}
-          <div className="bg-stone-50 p-2 rounded-2xl border border-stone-200">
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={handleSwitchToExistingSpecies}
-                className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                  entryMode === 'existing_species'
-                    ? 'bg-emerald-700 text-white shadow-sm'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>Khảo sát loài đã có trong CSDL</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  entryMode === 'existing_species' ? 'bg-emerald-800 text-emerald-100' : 'bg-stone-200 text-stone-600'
-                }`}>
-                  Giữ nguyên mã ID
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSwitchToNewSpecies}
-                className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
-                  entryMode === 'new_species'
-                    ? 'bg-amber-600 text-white shadow-sm'
-                    : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Thêm loài mới chưa có</span>
-                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                  entryMode === 'new_species' ? 'bg-amber-700 text-amber-100' : 'bg-stone-200 text-stone-600'
-                }`}>
-                  Cấp mã mới
-                </span>
-              </button>
             </div>
           </div>
 
           {/* SECTION 1: SPECIES IDENTIFICATION */}
-          <div className="space-y-3">
-            <h3 className="font-bold text-sm text-stone-900 border-b border-stone-200 pb-1.5 flex items-center justify-between">
+          <div className="space-y-3.5">
+            <h3 className="font-bold text-sm text-stone-900 border-b border-stone-200 pb-1.5 flex items-center justify-between flex-wrap gap-2">
               <span className="flex items-center gap-2">
                 <TreePine className="w-4 h-4 text-emerald-600" /> 1. Định danh loài cây thuốc
               </span>
-              {entryMode === 'existing_species' && selectedExistingPlant && (
+              {selectedExistingPlant && (
                 <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-lg bg-stone-900 text-emerald-400">
-                  Mã CSDL: {selectedExistingPlant.id}
+                  Liên kết CSDL: {selectedExistingPlant.id}
                 </span>
               )}
             </h3>
 
-            {/* If in EXISTING SPECIES mode */}
-            {entryMode === 'existing_species' && (
-              <div className="space-y-3">
-                <div className="relative">
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    Chọn loài cây thuốc trong CSDL để bổ sung điểm khảo sát thực địa:
-                  </label>
-                  
-                  {/* Select Species Dropdown Button */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setIsSpeciesDropdownOpen(!isSpeciesDropdownOpen)}
-                      className="w-full p-2.5 rounded-xl border border-stone-300 bg-white flex items-center justify-between text-left hover:border-emerald-500 transition-colors shadow-2xs"
-                    >
-                      {selectedExistingPlant ? (
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <img
-                            src={selectedExistingPlant.coverImage}
-                            alt=""
-                            className="w-7 h-7 rounded-lg object-cover border border-stone-200 shrink-0"
-                          />
-                          <div className="truncate">
-                            <span className="font-mono font-bold text-emerald-800 mr-2">[{selectedExistingPlant.id}]</span>
-                            <span className="font-bold text-stone-900">{selectedExistingPlant.vietnameseName}</span>
-                            <span className="text-stone-500 italic font-serif ml-2">({selectedExistingPlant.scientificName})</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-stone-400">Chọn một loài cây thuốc...</span>
-                      )}
-                      <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${isSpeciesDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    {/* Dropdown Menu */}
-                    {isSpeciesDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-stone-300 rounded-2xl shadow-xl z-30 overflow-hidden max-h-64 flex flex-col">
-                        <div className="p-2 border-b border-stone-100 bg-stone-50 flex items-center gap-2">
-                          <Search className="w-3.5 h-3.5 text-stone-400" />
-                          <input
-                            type="text"
-                            placeholder="Gõ tìm tên cây, tên khoa học, mã số..."
-                            value={speciesSearchQuery}
-                            onChange={(e) => setSpeciesSearchQuery(e.target.value)}
-                            className="w-full bg-transparent text-xs focus:outline-none placeholder-stone-400"
-                            autoFocus
-                          />
-                        </div>
-
-                        <div className="overflow-y-auto divide-y divide-stone-100">
-                          {filteredSpecies.map((p) => {
-                            const isSelected = selectedSpeciesId === p.id;
-                            return (
-                              <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => {
-                                  applyExistingPlant(p);
-                                  setIsSpeciesDropdownOpen(false);
-                                  setSpeciesSearchQuery('');
-                                }}
-                                className={`w-full p-2.5 flex items-center justify-between text-left hover:bg-emerald-50/70 transition-colors ${
-                                  isSelected ? 'bg-emerald-50 font-bold text-emerald-950' : 'text-stone-700'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <img
-                                    src={p.coverImage}
-                                    alt=""
-                                    className="w-7 h-7 rounded-lg object-cover border border-stone-200 shrink-0"
-                                  />
-                                  <div className="truncate">
-                                    <span className="font-mono text-[11px] text-emerald-700 font-bold mr-1.5">[{p.id}]</span>
-                                    <span className="text-xs font-semibold text-stone-900">{p.vietnameseName}</span>
-                                    <span className="text-[11px] text-stone-500 italic font-serif block truncate">{p.scientificName} • {p.family}</span>
-                                  </div>
-                                </div>
-                                {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Preserved Identification Summary Card */}
+            {/* Optional quick-pick from CSDL */}
+            <div className="bg-stone-50 p-3 rounded-2xl border border-stone-200 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[11px] font-semibold text-stone-600 flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Chọn nhanh loài đã có trong CSDL để tự động điền (không bắt buộc):</span>
+                </span>
                 {selectedExistingPlant && (
-                  <div className="p-3.5 rounded-2xl bg-emerald-50/70 border border-emerald-200/90 text-emerald-950 space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-xs bg-emerald-800 text-white px-2 py-0.5 rounded-md">
-                          {selectedExistingPlant.id}
-                        </span>
-                        <span className="font-bold text-sm text-emerald-950">{selectedExistingPlant.vietnameseName}</span>
-                        <span className="italic font-serif text-xs text-emerald-800">({selectedExistingPlant.scientificName})</span>
+                  <button
+                    type="button"
+                    onClick={handleClearSelectedExistingPlant}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 underline"
+                  >
+                    Xóa chọn / Nhập mới
+                  </button>
+                )}
+              </div>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsSpeciesDropdownOpen(!isSpeciesDropdownOpen)}
+                  className="w-full p-2.5 rounded-xl border border-stone-300 bg-white flex items-center justify-between text-left hover:border-emerald-500 transition-colors shadow-2xs"
+                >
+                  {selectedExistingPlant ? (
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <img
+                        src={selectedExistingPlant.coverImage}
+                        alt=""
+                        className="w-6 h-6 rounded-lg object-cover border border-stone-200 shrink-0"
+                      />
+                      <div className="truncate">
+                        <span className="font-mono font-bold text-emerald-800 mr-1.5">[{selectedExistingPlant.id}]</span>
+                        <span className="font-bold text-stone-900">{selectedExistingPlant.vietnameseName}</span>
+                        <span className="text-stone-500 italic font-serif ml-1.5">({selectedExistingPlant.scientificName})</span>
                       </div>
-                      <span className="text-[11px] font-medium text-emerald-800 bg-white/80 px-2 py-0.5 rounded-full border border-emerald-200">
-                        {selectedExistingPlant.family}
-                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-stone-500 text-xs">-- Chọn nhanh từ danh lục {uniqueSpeciesList.length} loài đã có (hoặc tự nhập bên dưới) --</span>
+                  )}
+                  <ChevronDown className={`w-4 h-4 text-stone-400 transition-transform ${isSpeciesDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+
+                {isSpeciesDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-stone-300 rounded-2xl shadow-xl z-30 overflow-hidden max-h-60 flex flex-col">
+                    <div className="p-2 border-b border-stone-100 bg-stone-50 flex items-center gap-2">
+                      <Search className="w-3.5 h-3.5 text-stone-400" />
+                      <input
+                        type="text"
+                        placeholder="Gõ tìm tên cây, họ, chi, tên khoa học, mã số..."
+                        value={speciesSearchQuery}
+                        onChange={(e) => setSpeciesSearchQuery(e.target.value)}
+                        className="w-full bg-transparent text-xs focus:outline-none placeholder-stone-400"
+                        autoFocus
+                      />
                     </div>
 
-                    <p className="text-[11px] text-emerald-900/90 leading-relaxed">
-                      💡 <b>Giữ nguyên mã định danh {selectedExistingPlant.id}:</b> Bạn đang ghi nhận thêm một điểm phân bố thực tế mới cho loài <b>{selectedExistingPlant.vietnameseName}</b>. Dữ liệu phân loại học và bài thuốc chuẩn sẽ được kế thừa. Hãy bổ sung tọa độ GPS, sinh cảnh và ghi nhận tại điểm này ở các mục bên dưới.
-                    </p>
-
-                    {/* Toggle standard botanical description */}
-                    <button
-                      type="button"
-                      onClick={() => setShowStandardTraits(!showStandardTraits)}
-                      className="text-[11px] text-emerald-800 hover:text-emerald-950 font-semibold flex items-center gap-1 underline underline-offset-2"
-                    >
-                      {showStandardTraits ? (
-                        <>
-                          <ChevronUp className="w-3.5 h-3.5" /> Ẩn đặc điểm nhận dạng chuẩn
-                        </>
+                    <div className="overflow-y-auto divide-y divide-stone-100">
+                      {filteredSpecies.length === 0 ? (
+                        <div className="p-4 text-center text-xs text-stone-400">
+                          Không tìm thấy loài phù hợp. Bạn có thể đóng và tự nhập ở các mục bên dưới.
+                        </div>
                       ) : (
-                        <>
-                          <ChevronDown className="w-3.5 h-3.5" /> Xem đặc điểm nhận dạng chuẩn & công dụng của loài
-                        </>
+                        filteredSpecies.map((p) => {
+                          const isSelected = selectedSpeciesId === p.id;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                applyExistingPlant(p);
+                                setIsSpeciesDropdownOpen(false);
+                                setSpeciesSearchQuery('');
+                              }}
+                              className={`w-full p-2.5 flex items-center justify-between text-left hover:bg-emerald-50/70 transition-colors ${
+                                isSelected ? 'bg-emerald-50 font-bold text-emerald-950' : 'text-stone-700'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <img
+                                  src={p.coverImage}
+                                  alt=""
+                                  className="w-7 h-7 rounded-lg object-cover border border-stone-200 shrink-0"
+                                />
+                                <div className="truncate">
+                                  <span className="font-mono text-[11px] text-emerald-700 font-bold mr-1.5">[{p.id}]</span>
+                                  <span className="text-xs font-semibold text-stone-900">{p.vietnameseName}</span>
+                                  <span className="text-[11px] text-stone-500 italic font-serif block truncate">
+                                    {p.family} → {getPlantGenus(p)} → {p.scientificName}
+                                  </span>
+                                </div>
+                              </div>
+                              {isSelected && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
+                            </button>
+                          );
+                        })
                       )}
-                    </button>
-
-                    {showStandardTraits && (
-                      <div className="p-2.5 bg-white/90 rounded-xl border border-emerald-200/80 text-[11px] space-y-1.5 text-stone-700 animate-fadeIn">
-                        <div><b>Dạng sống:</b> {selectedExistingPlant.identificationTraits?.growthForm}</div>
-                        <div><b>Đặc điểm lá:</b> {selectedExistingPlant.identificationTraits?.leaves}</div>
-                        <div><b>Hoa / Quả:</b> {selectedExistingPlant.identificationTraits?.flowers} / {selectedExistingPlant.identificationTraits?.fruits}</div>
-                        <div><b>Bài thuốc lưu truyền:</b> {(selectedExistingPlant.traditionalUses?.folkRemedies || []).join('; ')}</div>
-                      </div>
-                    )}
+                    </div>
                   </div>
                 )}
               </div>
-            )}
 
-            {/* If in NEW SPECIES mode */}
-            {entryMode === 'new_species' && (
-              <div className="space-y-3">
-                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs">
-                  🌱 <b>Thêm loài mới chưa có trong CSDL:</b> Nhập đầy đủ thông tin phân loại học bên dưới. Sau khi lưu, hệ thống sẽ tự động cấp mã định danh mới tiếp theo (ví dụ: <code>TA-HERB-016</code>) vào danh lục khoa học.
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">
-                      Tên tiếng Việt phổ thông / địa phương <span className="text-rose-500">*</span>:
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={vietnameseName}
-                      onChange={(e) => setVietnameseName(e.target.value)}
-                      placeholder="Ví dụ: Ba kích, Huyết đằng, Xuyên tâm liên..."
-                      className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-stone-50"
-                    />
-                    
-                    {/* Auto-detect warning if user types an existing name */}
-                    {autoDetectedExistingMatch && (
-                      <div className="mt-1.5 p-2 rounded-xl bg-emerald-100 text-emerald-950 border border-emerald-300 text-[11px] flex items-center justify-between gap-2">
-                        <span>
-                          Phát hiện loài <b>"{autoDetectedExistingMatch.vietnameseName}"</b> đã có mã <b>{autoDetectedExistingMatch.id}</b> trong CSDL!
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEntryMode('existing_species');
-                            applyExistingPlant(autoDetectedExistingMatch);
-                          }}
-                          className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px] shrink-0"
-                        >
-                          Giữ mã {autoDetectedExistingMatch.id}
-                        </button>
-                      </div>
+              {selectedExistingPlant && (
+                <div className="pt-1 space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowStandardTraits(!showStandardTraits)}
+                    className="text-[11px] text-emerald-800 hover:text-emerald-950 font-semibold flex items-center gap-1 underline underline-offset-2"
+                  >
+                    {showStandardTraits ? (
+                      <>
+                        <ChevronUp className="w-3.5 h-3.5" /> Ẩn đặc điểm chuẩn của loài đã chọn
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="w-3.5 h-3.5" /> Xem đặc điểm chuẩn & bài thuốc của [{selectedExistingPlant.id}] {selectedExistingPlant.vietnameseName}
+                      </>
                     )}
-                  </div>
+                  </button>
 
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">
-                      Tên gọi dân gian khác (cách nhau bằng dấu phẩy):
-                    </label>
-                    <input
-                      type="text"
-                      value={otherNames}
-                      onChange={(e) => setOtherNames(e.target.value)}
-                      placeholder="Ví dụ: Dây ruột gà, Kê huyết đằng..."
-                      className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">
-                      Tên khoa học quốc tế (nếu biết):
-                    </label>
-                    <input
-                      type="text"
-                      value={scientificName}
-                      onChange={(e) => setScientificName(e.target.value)}
-                      placeholder="Ví dụ: Morinda officinalis How"
-                      className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50 italic font-serif"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-stone-700 mb-1">
-                      Họ thực vật:
-                    </label>
-                    <input
-                      type="text"
-                      value={family}
-                      onChange={(e) => setFamily(e.target.value)}
-                      placeholder="Ví dụ: Họ Cà phê (Rubiaceae)"
-                      className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
-                    />
-                  </div>
+                  {showStandardTraits && (
+                    <div className="p-2.5 bg-white rounded-xl border border-emerald-200 text-[11px] space-y-1 text-stone-700 animate-fadeIn">
+                      <div><b>Phân loại:</b> {selectedExistingPlant.family} → {getPlantGenus(selectedExistingPlant)} → {selectedExistingPlant.vietnameseName} (<i>{selectedExistingPlant.scientificName}</i>)</div>
+                      <div><b>Dạng sống:</b> {selectedExistingPlant.identificationTraits?.growthForm}</div>
+                      <div><b>Đặc điểm lá:</b> {selectedExistingPlant.identificationTraits?.leaves}</div>
+                      <div><b>Bài thuốc lưu truyền:</b> {(selectedExistingPlant.traditionalUses?.folkRemedies || []).join('; ')}</div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Photo preview & upload for the survey point */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center pt-2">
-              <div className="sm:col-span-4 aspect-4/3 rounded-2xl overflow-hidden bg-stone-100 border border-stone-200">
-                <img src={coverImage} alt="Ảnh cây thuốc" className="w-full h-full object-cover" />
-              </div>
-
-              <div className="sm:col-span-8 space-y-2">
-                <label className="block font-semibold text-stone-700">
-                  Ảnh chụp thực địa tại điểm khảo sát này (Lá, thân, hoa hoặc quả):
+            {/* 5 ORDERED FIELDS IN SECTION 1:
+                1. Tên cây thuốc (Tên gọi dân gian khác) [REQUIRED]
+                2. Họ thực vật
+                3. Chi thực vật
+                4. Loài thực vật
+                5. Tên khoa học
+            */}
+            <div className="space-y-3">
+              {/* 1. Tên cây thuốc (Tên gọi dân gian khác) - REQUIRED */}
+              <div>
+                <label className="block font-semibold text-stone-800 mb-1">
+                  1. Tên cây thuốc (Tên gọi dân gian khác) <span className="text-rose-500">*</span>:
                 </label>
-                <div className="flex items-center gap-2">
-                  <label className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs">
-                    <Camera className="w-4 h-4" />
-                    <span>Chụp / Tải ảnh lên</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      className="hidden"
-                    />
-                  </label>
-                  <span className="text-[11px] text-stone-500">Hoặc dán link ảnh:</span>
-                </div>
                 <input
                   type="text"
-                  value={coverImage.startsWith('data:') ? 'Ảnh đính kèm từ thiết bị' : coverImage}
-                  onChange={(e) => setCoverImage(e.target.value)}
-                  disabled={coverImage.startsWith('data:')}
-                  placeholder="https://..."
-                  className="w-full p-2 rounded-xl border border-stone-300 text-[11px] bg-stone-50 text-stone-600"
+                  required
+                  list="survey-plant-names-list"
+                  value={plantNameInput}
+                  onChange={(e) => {
+                    setPlantNameInput(e.target.value);
+                    if (selectedSpeciesId) {
+                      setSelectedSpeciesId('');
+                    }
+                  }}
+                  placeholder="Ví dụ: Cà gai leo (Cà quánh, Cà cườm) hoặc Lá lốt..."
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white font-medium text-stone-900"
                 />
+                <datalist id="survey-plant-names-list">
+                  {uniqueSpeciesList.map((p) => (
+                    <option
+                      key={p.id}
+                      value={
+                        p.otherNames && p.otherNames.length > 0
+                          ? `${p.vietnameseName} (${p.otherNames.join(', ')})`
+                          : p.vietnameseName
+                      }
+                    />
+                  ))}
+                </datalist>
+
+                {autoDetectedExistingMatch && (
+                  <div className="mt-1.5 p-2 rounded-xl bg-emerald-100 text-emerald-950 border border-emerald-300 text-[11px] flex items-center justify-between gap-2">
+                    <span>
+                      Nhận diện loài <b>"{autoDetectedExistingMatch.vietnameseName}"</b> đã có mã <b>{autoDetectedExistingMatch.id}</b> trong CSDL (sẽ tự động liên kết điểm mới vào loài này).
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => applyExistingPlant(autoDetectedExistingMatch)}
+                      className="px-2 py-0.5 rounded bg-emerald-700 text-white font-bold text-[10px] shrink-0"
+                    >
+                      Điền thông tin {autoDetectedExistingMatch.id}
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {/* 2. Họ thực vật & 3. Chi thực vật */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    2. Họ thực vật <span className="text-stone-400 font-normal">(không bắt buộc)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    list="survey-families-list"
+                    value={family}
+                    onChange={(e) => setFamily(e.target.value)}
+                    placeholder="Ví dụ: Họ Cà (Solanaceae), Họ Cà phê..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
+                  />
+                  <datalist id="survey-families-list">
+                    {availableFamilies.map((fam) => (
+                      <option key={fam} value={fam} />
+                    ))}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    3. Chi thực vật <span className="text-stone-400 font-normal">(không bắt buộc)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    list="survey-genera-list"
+                    value={genus}
+                    onChange={(e) => setGenus(e.target.value)}
+                    placeholder="Ví dụ: Chi Solanum, Chi Morinda..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
+                  />
+                  <datalist id="survey-genera-list">
+                    {availableGenera.map((gen) => (
+                      <option key={gen} value={gen} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              {/* 4. Loài thực vật & 5. Tên khoa học */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    4. Loài thực vật <span className="text-stone-400 font-normal">(không bắt buộc)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    value={speciesInput}
+                    onChange={(e) => setSpeciesInput(e.target.value)}
+                    placeholder="Ví dụ: Cà gai leo / Solanum procumbens..."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    5. Tên khoa học <span className="text-stone-400 font-normal">(không bắt buộc)</span>:
+                  </label>
+                  <input
+                    type="text"
+                    value={scientificName}
+                    onChange={(e) => setScientificName(e.target.value)}
+                    placeholder="Ví dụ: Solanum procumbens Lour."
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50 italic font-serif"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Multi-photo attachment & gallery manager for the survey point */}
+            <div className="bg-stone-50/90 p-3.5 rounded-2xl border border-stone-200 space-y-3 pt-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <label className="font-bold text-stone-800 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-emerald-600" />
+                    <span>Ảnh chụp thực địa tại điểm khảo sát (Đính kèm nhiều ảnh)</span>
+                  </label>
+                  <p className="text-[11px] text-stone-500">
+                    Có thể chọn hoặc chụp nhiều ảnh cùng lúc (Toàn cây, Lá, Hoa, Quả, Rễ/Củ) — tối đa {MAX_PHOTOS} ảnh.
+                  </p>
+                </div>
+                <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {attachedPhotos.length}/{MAX_PHOTOS} ảnh
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <label className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center justify-center gap-1.5 cursor-pointer transition-colors shadow-2xs shrink-0">
+                  <Camera className="w-4 h-4" />
+                  <span>{isCompressingPhotos ? 'Đang nén ảnh...' : 'Chọn / Chụp nhiều ảnh'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={isCompressingPhotos}
+                    onChange={handleMultiplePhotosUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                <div className="flex-1 flex items-center gap-1.5">
+                  <div className="relative flex-1">
+                    <Link2 className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-stone-400" />
+                    <input
+                      type="text"
+                      value={photoUrlInput}
+                      onChange={(e) => setPhotoUrlInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddPhotoUrl();
+                        }
+                      }}
+                      placeholder="Hoặc dán URL ảnh (https://...) rồi bấm Thêm"
+                      className="w-full pl-8 pr-2.5 py-2 rounded-xl border border-stone-300 text-[11px] bg-white text-stone-700"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddPhotoUrl}
+                    className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-white font-semibold text-[11px] flex items-center gap-1 shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm URL</span>
+                  </button>
+                </div>
+              </div>
+
+              {photoError && (
+                <div className="p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-[11px] flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>{photoError}</span>
+                </div>
+              )}
+
+              {attachedPhotos.length === 0 ? (
+                <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-dashed border-stone-300">
+                  <img
+                    src={activeCoverImage}
+                    alt="Ảnh mặc định"
+                    className="w-14 h-14 rounded-xl object-cover border border-stone-200 shrink-0"
+                  />
+                  <div className="text-[11px] text-stone-500 leading-relaxed">
+                    Chưa đính kèm ảnh mới nào cho điểm khảo sát này. Nếu không tải ảnh lên, hệ thống sẽ tạm sử dụng ảnh đại diện chuẩn của loài.
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {attachedPhotos.map((photo, idx) => {
+                    const isCover = photo.id === coverPhotoId || (!coverPhotoId && idx === 0);
+                    return (
+                      <div
+                        key={photo.id}
+                        className={`p-2 rounded-xl bg-white border flex items-start gap-2.5 transition-all ${
+                          isCover ? 'border-emerald-500 ring-1 ring-emerald-400/40 shadow-xs' : 'border-stone-200'
+                        }`}
+                      >
+                        <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-stone-100 border border-stone-200 shrink-0">
+                          <img src={photo.url} alt={photo.caption} className="w-full h-full object-cover" />
+                          {isCover && (
+                            <span className="absolute bottom-0 inset-x-0 bg-emerald-700/90 text-white text-[9px] font-bold text-center py-0.5">
+                              Ảnh bìa
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0 space-y-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <select
+                              value={photo.type}
+                              onChange={(e) => handleUpdatePhotoMeta(photo.id, { type: e.target.value as PlantPhoto['type'] })}
+                              className="text-[11px] font-semibold px-1.5 py-0.5 rounded-lg border border-stone-200 bg-stone-50 text-stone-700"
+                            >
+                              <option value="whole">Toàn cây</option>
+                              <option value="leaf">Lá</option>
+                              <option value="flower">Hoa</option>
+                              <option value="fruit">Quả</option>
+                              <option value="root">Rễ / Củ</option>
+                            </select>
+
+                            <div className="flex items-center gap-1">
+                              {!isCover && (
+                                <button
+                                  type="button"
+                                  onClick={() => setCoverPhotoId(photo.id)}
+                                  className="px-1.5 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-[10px] font-semibold flex items-center gap-0.5 border border-emerald-200"
+                                  title="Đặt làm ảnh đại diện"
+                                >
+                                  <Star className="w-2.5 h-2.5" />
+                                  <span>Ảnh bìa</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhoto(photo.id)}
+                                className="p-1 rounded-md text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors"
+                                title="Xóa ảnh này"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <input
+                            type="text"
+                            value={photo.caption}
+                            onChange={(e) => handleUpdatePhotoMeta(photo.id, { caption: e.target.value })}
+                            placeholder="Chú thích ảnh..."
+                            className="w-full px-2 py-1 rounded-lg border border-stone-200 text-[11px] bg-stone-50 text-stone-700"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
@@ -953,83 +1236,11 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
                 />
               </div>
 
-              {/* Unified Field Survey Occurrence Status Selector */}
-              <div className="sm:col-span-2 bg-emerald-50/60 p-3.5 rounded-2xl border border-emerald-200/80">
-                <label className="block font-bold text-emerald-950 mb-1.5 flex items-center justify-between">
-                  <span>Hiện trạng thực địa tại điểm khảo sát (04 trạng thái):</span>
-                  <span className="text-[10px] font-normal text-emerald-800">
-                    Ghi nhận chính xác tình trạng thực tế của cây tại điểm khảo sát
-                  </span>
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleConservationStatusChange('An toàn')}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'An toàn'
-                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-emerald-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🟢 An toàn</span>
-                    </div>
-                    <span className={`text-[10px] ${conservationStatus === 'An toàn' ? 'text-emerald-100' : 'text-stone-500'}`}>
-                      Còn tồn tại & sinh trưởng tốt
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleConservationStatusChange('Bị suy giảm')}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Bị suy giảm'
-                        ? 'bg-amber-600 text-white border-amber-700 shadow-sm'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-amber-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🟡 Bị suy giảm</span>
-                    </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Bị suy giảm' ? 'text-amber-100' : 'text-stone-500'}`}>
-                      Suy giảm cá thể / sâu bệnh
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleConservationStatusChange('Biến mất')}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Biến mất'
-                        ? 'bg-stone-800 text-white border-stone-900 shadow-sm'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>⚫ Biến mất</span>
-                    </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Biến mất' ? 'text-stone-300' : 'text-stone-500'}`}>
-                      Không còn tìm thấy ở điểm này
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleConservationStatusChange('Điểm mới')}
-                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition-all ${
-                      conservationStatus === 'Điểm mới'
-                        ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
-                        : 'bg-white text-stone-700 border-stone-200 hover:bg-purple-50/50'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 font-bold text-xs">
-                      <span>🟣 Điểm mới</span>
-                    </div>
-                    <span className={`text-[10px] ${conservationStatus === 'Điểm mới' ? 'text-purple-100' : 'text-stone-500'}`}>
-                      Điểm khảo sát mới phát hiện
-                    </span>
-                  </button>
-                </div>
+              <div className="sm:col-span-2 bg-purple-50/70 px-3.5 py-2.5 rounded-2xl border border-purple-200/80 text-[11px] text-purple-900 flex items-center gap-2">
+                <span>🟣</span>
+                <span>
+                  Trạng thái mặc định của điểm khảo sát mới: <b>Điểm mới (Chờ duyệt)</b> — sẽ tự động chuyển sang <b>🟢 Đã ghi nhận</b> sau khi Quản trị viên xác nhận và duyệt phiếu.
+                </span>
               </div>
 
               <div className="sm:col-span-2">
@@ -1193,28 +1404,44 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
+              <div className="sm:col-span-2">
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Họ tên người khảo sát / Nhóm nghiên cứu:
+                  1. Họ tên người khảo sát / Nhóm nghiên cứu <span className="text-rose-500">*</span>:
                 </label>
                 <input
                   type="text"
+                  required
                   value={surveyor}
                   onChange={(e) => setSurveyor(e.target.value)}
-                  placeholder="Ví dụ: Nhóm STEM Trường THCS Nguyễn Khuyến"
-                  className="w-full p-2 rounded-xl border border-stone-300 bg-stone-50"
+                  placeholder="Ví dụ: Nguyễn Văn An / Nhóm nghiên cứu KHKT Trường THCS Nguyễn Khuyến"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white"
                 />
               </div>
 
               <div>
                 <label className="block font-semibold text-stone-700 mb-1">
-                  Tên chương trình / Đề tài khảo sát:
+                  2. Địa chỉ <span className="text-stone-400 font-normal">(không bắt buộc)</span>:
                 </label>
                 <input
                   type="text"
-                  value={surveyTitle}
-                  onChange={(e) => setSurveyTitle(e.target.value)}
-                  className="w-full p-2 rounded-xl border border-stone-300 bg-stone-50"
+                  value={surveyorAddress}
+                  onChange={(e) => setSurveyorAddress(e.target.value)}
+                  placeholder="Ví dụ: Thôn Đức Bố, xã Tam Anh, TP. Đà Nẵng"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-stone-50"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-stone-700 mb-1">
+                  3. Số điện thoại / Zalo <span className="text-rose-500">*</span>:
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={surveyorPhone}
+                  onChange={(e) => setSurveyorPhone(e.target.value)}
+                  placeholder="Ví dụ: 0912345678"
+                  className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-emerald-500 bg-white font-mono"
                 />
               </div>
             </div>
@@ -1231,19 +1458,19 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
           {/* Action buttons */}
           <div className="pt-4 border-t border-stone-200 flex items-center justify-between gap-3">
             <div className="text-[11px] text-stone-500">
-              {entryMode === 'existing_species' && selectedExistingPlant ? (
+              {selectedExistingPlant ? (
                 <span>
                   Đang ghi nhận điểm mới cho: <b className="text-emerald-700">[{selectedExistingPlant.id}] {selectedExistingPlant.vietnameseName}</b>
                 </span>
               ) : (
-                <span>Đang thêm loài mới vào danh lục</span>
+                <span>Trạng thái khi gửi: <b className="text-purple-700">🟣 Điểm mới (Chờ duyệt)</b></span>
               )}
             </div>
 
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => resetFormToDefault(entryMode)}
+                onClick={resetFormToDefault}
                 className="px-3 py-2.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 hover:text-stone-800 text-xs font-semibold transition-colors flex items-center gap-1 border border-stone-200"
                 title="Xóa trắng các mục đã nhập để ghi phiếu mới từ đầu"
               >

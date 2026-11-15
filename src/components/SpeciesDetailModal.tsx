@@ -4,7 +4,8 @@ import {
   MedicinalPlant, 
   PlantMonitoringLog,
   PlantOccurrenceStatus,
-  getPlantSurveyStatus
+  getPlantSurveyStatus,
+  getPlantGenus
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 import { HerbMapLogo } from './HerbMapLogo';
@@ -298,26 +299,6 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
             </div>
           )}
 
-          {/* Degraded Alert Banner if latest status is degraded */}
-          {!isDisappeared && statusMeta.key === 'degraded' && (
-            <div className="bg-amber-950/90 text-amber-100 p-4 rounded-2xl border-2 border-amber-500 flex items-start gap-3 shadow-md animate-fadeIn">
-              <div className="p-2 rounded-xl bg-amber-900/80 text-amber-300 shrink-0 mt-0.5">
-                <AlertTriangle className="w-5 h-5 text-amber-300" />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-white">CẢNH BÁO: QUẦN THỂ BỊ SUY GIẢM SỐ LƯỢNG NGOÀI THỰC ĐỊA</span>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-800 text-amber-200 border border-amber-600">
-                    Icon màu vàng trên Bản đồ
-                  </span>
-                </div>
-                <p className="text-xs text-amber-200 leading-relaxed">
-                  Đợt kiểm tra mới nhất ghi nhận loài cây này đang bị suy giảm cá thể ngoài thực địa. Biểu tượng trên Bản đồ số được hiển thị màu vàng để theo dõi và bảo vệ.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* QR Card Drawer if opened */}
           {showQRCard && (
             <div className="bg-gradient-to-br from-emerald-950 to-stone-900 p-5 rounded-2xl text-white border border-emerald-800/60 shadow-xl space-y-4 animate-slideDown">
@@ -405,6 +386,16 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   <span className="text-stone-500">Họ thực vật:</span>
                   <span className="font-semibold text-stone-900">{plant.family}</span>
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-stone-500">Chi thực vật:</span>
+                  <span className="font-semibold text-stone-900">{getPlantGenus(plant)}</span>
+                </div>
+                {plant.species && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-stone-500">Loài thực vật:</span>
+                    <span className="font-semibold text-stone-900">{plant.species}</span>
+                  </div>
+                )}
                 {plant.otherNames && plant.otherNames.length > 0 && (
                   <div className="flex items-start justify-between">
                     <span className="text-stone-500">Tên gọi khác:</span>
@@ -703,7 +694,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   <label className="block text-[11px] font-bold text-stone-700 mb-1.5">
                     Hiện trạng thực địa tại tọa độ khảo sát:
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
                       newLogStatus === 'present' 
                         ? 'bg-emerald-50 border-emerald-500 text-emerald-900 ring-1 ring-emerald-400' 
@@ -718,27 +709,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                         className="text-emerald-600 focus:ring-emerald-500"
                       />
                       <div className="text-[11px]">
-                        <span className="font-bold block">🟢 An toàn</span>
-                        <span className="text-[10px] text-stone-500">Phát triển tốt, ổn định</span>
-                      </div>
-                    </label>
-
-                    <label className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
-                      newLogStatus === 'degraded' 
-                        ? 'bg-amber-50 border-amber-500 text-amber-900 ring-1 ring-amber-400' 
-                        : 'bg-stone-50 border-stone-200 text-stone-700 hover:bg-stone-100'
-                    }`}>
-                      <input
-                        type="radio"
-                        name="occurrenceStatus"
-                        value="degraded"
-                        checked={newLogStatus === 'degraded'}
-                        onChange={() => setNewLogStatus('degraded')}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
-                      <div className="text-[11px]">
-                        <span className="font-bold block">🟡 Bị suy giảm</span>
-                        <span className="text-[10px] text-stone-500">Suy giảm cá thể / sâu bệnh</span>
+                        <span className="font-bold block">🟢 Đã ghi nhận</span>
+                        <span className="text-[10px] text-stone-500">Còn tồn tại, phát triển ổn định</span>
                       </div>
                     </label>
 
@@ -849,20 +821,16 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
                     let dotColor = 'bg-emerald-500 ring-emerald-200';
                     let badgeBg = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                    let statusTitle = '🟢 An toàn';
+                    let statusTitle = '🟢 Đã ghi nhận';
 
                     if (log.status === 'disappeared') {
                       dotColor = 'bg-stone-600 ring-stone-200';
                       badgeBg = 'bg-stone-100 text-stone-800 border-stone-300';
                       statusTitle = '⚫ Biến mất khỏi thực địa';
-                    } else if (log.status === 'degraded') {
-                      dotColor = 'bg-amber-500 ring-amber-200';
-                      badgeBg = 'bg-amber-100 text-amber-800 border-amber-200';
-                      statusTitle = '🟡 Bị suy giảm';
                     } else if (log.status === 'new') {
                       dotColor = 'bg-purple-500 ring-purple-200';
                       badgeBg = 'bg-purple-100 text-purple-800 border-purple-200';
-                      statusTitle = '🟣 Điểm mới';
+                      statusTitle = '🟣 Điểm mới (Chờ duyệt)';
                     }
 
                     if (isPending) {
@@ -1019,6 +987,16 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
             <p>
               👤 <b>Người khảo sát / Thu thập:</b> {plant.dataSource.surveyor} (Ngày {plant.dataSource.surveyDate})
             </p>
+            {plant.dataSource.surveyorAddress && (
+              <p>
+                📍 <b>Địa chỉ người khảo sát:</b> {plant.dataSource.surveyorAddress}
+              </p>
+            )}
+            {plant.dataSource.surveyorPhone && (
+              <p>
+                📞 <b>Số điện thoại / Zalo:</b> {plant.dataSource.surveyorPhone}
+              </p>
+            )}
             {plant.dataSource.verifiedBy && (
               <p>
                 ✅ <b>Chuyên môn thẩm định:</b> {plant.dataSource.verifiedBy}

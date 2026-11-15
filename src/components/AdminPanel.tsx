@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MedicinalPlant, PlantMonitoringLog } from '../types';
+import { MedicinalPlant, PlantMonitoringLog, getPlantGenus } from '../types';
 import { 
   ShieldCheck, 
   Trash2, 
@@ -103,7 +103,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleApprove = (id: string, name: string) => {
     const updated = updatePlantStatus(id, 'verified');
     onPlantsUpdated(updated);
-    showNotice(`Đã phê duyệt & xác nhận khoa học loài "${name}"!`);
+    showNotice(`Đã duyệt phiếu khảo sát "${name}" — trạng thái cây đã chuyển sang "Đã ghi nhận"!`);
   };
 
   const handleRevertToPending = (id: string, name: string) => {
@@ -552,9 +552,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </div>
                           </td>
 
-                          {/* Family & Habitat */}
+                          {/* Family, Genus & Habitat */}
                           <td className="p-3.5">
                             <span className="text-stone-900 font-medium block">{plant.family}</span>
+                            <span className="text-[11px] text-emerald-700 font-medium block">{getPlantGenus(plant)}</span>
                             <span className="text-[11px] text-stone-500">{plant.habitat}</span>
                           </td>
 
@@ -569,14 +570,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </span>
                           </td>
 
-                          {/* Traditional Uses */}
+                          {/* Traditional Uses & Surveyor Info */}
                           <td className="p-3.5 max-w-xs">
                             <p className="line-clamp-2 text-[11px] text-stone-600">
-                              {plant.traditionalUses.remedies || plant.traditionalUses.preparation}
+                              {(plant.traditionalUses.folkRemedies || []).join('; ') || plant.traditionalUses.preparation}
                             </p>
-                            <span className="text-[10px] text-stone-400 block mt-0.5">
-                              Nguồn: {plant.traditionalUses.informantName} ({plant.traditionalUses.informantRole})
+                            <span className="text-[10px] text-stone-500 block mt-0.5">
+                              Khảo sát: <b>{plant.dataSource?.surveyor || '—'}</b>
+                              {plant.dataSource?.surveyorPhone ? ` • ${plant.dataSource.surveyorPhone}` : ''}
                             </span>
+                            {plant.dataSource?.surveyorAddress && (
+                              <span className="text-[10px] text-stone-400 block truncate">
+                                Đ/c: {plant.dataSource.surveyorAddress}
+                              </span>
+                            )}
                           </td>
 
                           {/* Status */}
@@ -686,16 +693,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {pendingMonitoringLogs.map(({ plant, log }) => {
                 let statusBadge = (
                   <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    🟢 Báo cáo: An toàn
+                    🟢 Báo cáo: Đã ghi nhận
                   </span>
                 );
-                if (log.status === 'degraded') {
-                  statusBadge = (
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                      🟡 Báo cáo: Bị suy giảm
-                    </span>
-                  );
-                } else if (log.status === 'disappeared') {
+                if (log.status === 'disappeared') {
                   statusBadge = (
                     <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-100 text-stone-900 border border-stone-300">
                       ⚫ Báo cáo: Biến mất (Lưu trữ điểm đã mất)
@@ -704,7 +705,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 } else if (log.status === 'new') {
                   statusBadge = (
                     <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
-                      🟣 Báo cáo: Điểm mới
+                      🟣 Báo cáo: Điểm mới (Chờ duyệt)
                     </span>
                   );
                 }

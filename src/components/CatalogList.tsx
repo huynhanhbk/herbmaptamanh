@@ -8,6 +8,7 @@ import {
   getHabitatLabel,
   getConservationStatusLabel,
   getPlantSurveyStatus,
+  getPlantGenus,
   SurveyPointStatusKey
 } from '../types';
 import { 
@@ -52,12 +53,11 @@ export const CatalogList: React.FC<CatalogListProps> = ({
   const [selectedCommune, setSelectedCommune] = useState<string>('all');
   const [selectedOccurrence, setSelectedOccurrence] = useState<'all' | SurveyPointStatusKey>('all');
 
-  // Counts for 04 field survey statuses
+  // Counts for 03 field survey statuses
   const occurrenceCounts = useMemo(() => {
     return {
       all: plants.length,
-      safe: plants.filter((p) => getPlantSurveyStatus(p).key === 'safe').length,
-      degraded: plants.filter((p) => getPlantSurveyStatus(p).key === 'degraded').length,
+      recorded: plants.filter((p) => getPlantSurveyStatus(p).key === 'recorded').length,
       disappeared: plants.filter((p) => getPlantSurveyStatus(p).key === 'disappeared').length,
       new: plants.filter((p) => getPlantSurveyStatus(p).key === 'new').length,
     };
@@ -75,7 +75,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
         }
       }
 
-      // 04 field survey statuses filter
+      // 03 field survey statuses filter
       if (selectedOccurrence !== 'all' && statusMeta.key !== selectedOccurrence) {
         return false;
       }
@@ -156,7 +156,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           )}
         </div>
 
-        {/* Primary Field Survey Status Tabs (04 statuses) */}
+        {/* Primary Field Survey Status Tabs (03 statuses) */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs border-b border-stone-100 pb-2">
           <span className="text-stone-400 font-semibold text-[11px] shrink-0 mr-1">Hiện trạng thực địa:</span>
           <button
@@ -173,29 +173,16 @@ export const CatalogList: React.FC<CatalogListProps> = ({
             </span>
           </button>
           <button
-            onClick={() => setSelectedOccurrence('safe')}
+            onClick={() => setSelectedOccurrence('recorded')}
             className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedOccurrence === 'safe'
+              selectedOccurrence === 'recorded'
                 ? 'bg-emerald-700 text-white font-bold shadow-xs'
                 : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
             }`}
           >
-            <span>🟢 An toàn</span>
+            <span>🟢 Đã ghi nhận</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-900/40 text-emerald-100 font-mono">
-              {occurrenceCounts.safe}
-            </span>
-          </button>
-          <button
-            onClick={() => setSelectedOccurrence('degraded')}
-            className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap flex items-center gap-1.5 transition-colors ${
-              selectedOccurrence === 'degraded'
-                ? 'bg-amber-600 text-white font-bold shadow-xs'
-                : 'bg-amber-50 hover:bg-amber-100 text-amber-900'
-            }`}
-          >
-            <span>🟡 Bị suy giảm</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-900/40 text-amber-100 font-mono">
-              {occurrenceCounts.degraded}
+              {occurrenceCounts.recorded}
             </span>
           </button>
           <button
@@ -219,9 +206,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 ? 'bg-purple-700 text-white font-bold shadow-xs'
                 : 'bg-purple-50 hover:bg-purple-100 text-purple-800'
             }`}
-            title="Điểm mới khảo sát hoặc cộng đồng đóng góp"
+            title="Điểm mới khảo sát hoặc cộng đồng đóng góp chờ quản trị viên duyệt"
           >
-            <span>🟣 Điểm mới</span>
+            <span>🟣 Điểm mới (Chờ duyệt)</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-900/40 text-purple-100 font-mono">
               {occurrenceCounts.new}
             </span>
@@ -308,8 +295,6 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 className={`bg-white rounded-3xl overflow-hidden border shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col group hover:-translate-y-1 ${
                   isPlantDisappeared 
                     ? 'border-stone-300 bg-stone-50/70 opacity-90' 
-                    : statusMeta.key === 'degraded'
-                    ? 'border-amber-300' 
                     : statusMeta.key === 'new'
                     ? 'border-purple-300'
                     : 'border-stone-200/90'
@@ -361,6 +346,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                       <p className="text-xs text-stone-500 italic font-serif mt-0.5">
                         {plant.scientificName}
                       </p>
+                      <p className="text-[11px] text-stone-500 mt-0.5 truncate">
+                        {plant.family} → {getPlantGenus(plant)}
+                      </p>
                     </div>
 
                     {isPlantDisappeared ? (
@@ -372,13 +360,9 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                           Dữ liệu lưu trữ thực địa. Có thể khôi phục khi phát hiện lại hoặc trồng mới tại vị trí này.
                         </p>
                       </div>
-                    ) : statusMeta.key === 'degraded' ? (
-                      <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900 flex items-center gap-1.5">
-                        <span>⚠️ <b>Hiện trạng:</b> Quần thể bị suy giảm số lượng cá thể ngoài thực địa.</span>
-                      </div>
                     ) : statusMeta.key === 'new' ? (
                       <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-xl text-[11px] text-purple-900 flex items-center gap-1.5">
-                        <span>🟣 <b>Hiện trạng:</b> Điểm mới ghi nhận khảo sát / đóng góp cộng đồng.</span>
+                        <span>🟣 <b>Hiện trạng:</b> Điểm mới (Chờ duyệt) từ khảo sát / đóng góp cộng đồng.</span>
                       </div>
                     ) : (
                       <p className="text-xs text-stone-600 line-clamp-2 mt-2 leading-relaxed font-normal">

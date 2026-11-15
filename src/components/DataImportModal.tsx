@@ -79,13 +79,16 @@ export const DataImportModal: React.FC<DataImportModalProps> = ({
       } else {
         const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
         if (lines.length > 1) {
+          const headers = lines[0].split(',').map((h) => h.replace(/"/g, '').trim().toLowerCase());
+          const habIdx = headers.findIndex((h) => h.includes('sinh cảnh') || h === 'habitat');
+          const resolvedHabIdx = habIdx >= 0 ? habIdx : (headers.some((h) => h.includes('chi thực vật')) ? 5 : 4);
           const sampleRows = lines.slice(1, 5).map((row, idx) => {
             const cols = row.split(',');
             return {
               id: cols[0]?.replace(/"/g, '') || `Dòng ${idx + 1}`,
               vietnameseName: cols[1]?.replace(/"/g, '') || 'Chưa rõ tên',
               scientificName: cols[2]?.replace(/"/g, '') || 'Đang phân loại',
-              habitat: cols[4]?.replace(/"/g, '') || 'Khu vực thực địa',
+              habitat: cols[resolvedHabIdx]?.replace(/"/g, '') || 'Khu vực thực địa',
             };
           });
           setPreviewItems(sampleRows);
