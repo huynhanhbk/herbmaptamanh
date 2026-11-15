@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
@@ -54,7 +57,8 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersGroupRef = useRef<L.LayerGroup | null>(null);
+  const markersGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const markersByIdRef = useRef<Map<string, L.Marker>>(new Map());
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
   // Filters inside map view - Unified 5 status filters
@@ -132,8 +136,8 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     }
   };
 
-  // Default Tam Anh Center Coordinates (Núi Thành, Quảng Nam)
-  const TAM_ANH_CENTER = [15.4625, 108.6180] as [number, number];
+  // Default Tam Anh Center Coordinates (Xã Tam Anh mới, TP. Đà Nẵng: 15°29′06″ B, 108°35′02″ Đ)
+  const TAM_ANH_CENTER = [15.4848, 108.5840] as [number, number];
 
   // Initialize Map
   useEffect(() => {
@@ -157,13 +161,40 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     osmLayer.addTo(map);
 
-    const markersGroup = L.layerGroup().addTo(map);
+    const markersGroup = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 45,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        let sizePx = 40;
+        let sizeClass = 'w-10 h-10 text-xs';
+        let colorClass = 'bg-emerald-600/95 ring-emerald-300/60';
+        if (count >= 20) {
+          sizePx = 48;
+          sizeClass = 'w-12 h-12 text-sm';
+          colorClass = 'bg-teal-700/95 ring-teal-300/60';
+        } else if (count >= 10) {
+          sizePx = 44;
+          sizeClass = 'w-11 h-11 text-xs';
+          colorClass = 'bg-emerald-700/95 ring-emerald-300/60';
+        }
+        return L.divIcon({
+          html: `<div class="${sizeClass} ${colorClass} ring-4 border-2 border-white rounded-full flex items-center justify-center text-white font-extrabold shadow-xl transition-transform hover:scale-105">${count}</div>`,
+          className: 'custom-herb-cluster-icon',
+          iconSize: L.point(sizePx, sizePx),
+        });
+      },
+    }).addTo(map);
     markersGroupRef.current = markersGroup;
     mapInstanceRef.current = map;
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
+      markersGroupRef.current = null;
+      markersByIdRef.current.clear();
     };
   }, []);
 
@@ -288,6 +319,9 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     const markersGroup = markersGroupRef.current;
     markersGroup.clearLayers();
+    markersByIdRef.current.clear();
+
+    const newMarkers: L.Marker[] = [];
 
     filteredPlants.forEach((plant) => {
       const isSelected = selectedPlantId === plant.id;
@@ -351,15 +385,27 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         onSelectPlant(plant);
       });
 
-      markersGroup.addLayer(marker);
+      markersByIdRef.current.set(plant.id, marker);
+      newMarkers.push(marker);
     });
+
+    if (newMarkers.length > 0) {
+      markersGroup.addLayers(newMarkers);
+    }
   }, [filteredPlants, selectedPlantId, onSelectPlant]);
 
-  // Center on Selected Plant when selectedPlantId changes
+  // Center on Selected Plant when selectedPlantId changes (and expand cluster if needed)
   useEffect(() => {
     if (!selectedPlantId || !mapInstanceRef.current) return;
     const plant = plants.find((p) => p.id === selectedPlantId);
-    if (plant) {
+    if (!plant) return;
+
+    const targetMarker = markersByIdRef.current.get(selectedPlantId);
+    if (targetMarker && markersGroupRef.current) {
+      markersGroupRef.current.zoomToShowLayer(targetMarker, () => {
+        targetMarker.openPopup();
+      });
+    } else {
       mapInstanceRef.current.setView([plant.location.lat, plant.location.lng], 16, {
         animate: true,
       });

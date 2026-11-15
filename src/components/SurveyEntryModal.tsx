@@ -103,8 +103,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [habitatCategory, setHabitatCategory] = useState<HabitatCategory>('garden');
   const [communeSection, setCommuneSection] = useState<CommuneVillage>('Thôn Đức Bố');
   const [addressDescription, setAddressDescription] = useState('Thôn Đức Bố, xã Tam Anh');
-  const [lat, setLat] = useState<number>(15.4635);
-  const [lng, setLng] = useState<number>(108.6185);
+  const [lat, setLat] = useState<number>(15.4848);
+  const [lng, setLng] = useState<number>(108.5840);
   const [isGettingGPS, setIsGettingGPS] = useState(false);
   const [gpsStatusMsg, setGpsStatusMsg] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -218,8 +218,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setHabitatCategory('garden');
     setCommuneSection('Thôn Đức Bố');
     setAddressDescription('');
-    setLat(15.4635);
-    setLng(108.6185);
+    setLat(15.4848);
+    setLng(108.5840);
     setInformantName('Người dân am hiểu cây thuốc bản địa');
     setInformantRole('');
     setHasConsent(true);
@@ -319,8 +319,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         }
         setCommuneSection('Thôn Đức Bố');
         setAddressDescription('Thôn Đức Bố, xã Tam Anh');
-        setLat(15.4635);
-        setLng(108.6185);
+        setLat(15.4848);
+        setLng(108.5840);
       }
     } else {
       // Fresh new survey: Reset all form fields to default!

@@ -28,6 +28,12 @@
   background: white !important;
 }
 
+.custom-herb-cluster-icon,
+.custom-herb-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
 /* Custom Pulse Markers */
 @keyframes pulse-ring {
   0% {

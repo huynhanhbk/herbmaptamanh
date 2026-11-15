@@ -13,24 +13,43 @@ import { MedicinalPlant, AICandidate, PlantMonitoringLog } from './types';
 import { 
   getStoredPlants, 
   saveNewPlant, 
-  verifyAdminPasscode, 
   checkAndRunDailyAutoBackup, 
   addPlantMonitoringLog,
   approvePlantMonitoringLog,
   rejectPlantMonitoringLog,
   deletePlantMonitoringLog
 } from './utils/storage';
-import { subscribeToPlantsRealtime, syncInitialPlantsToFirestore } from './lib/plantSync';
-import { Lock, CheckCircle, X, ShieldAlert } from 'lucide-react';
+import { 
+  subscribeToPlantsRealtime, 
+  syncInitialPlantsToFirestore,
+  checkUserIsAdmin,
+  subscribeToPendingSurveysRealtime,
+  PendingCommunitySurvey
+} from './lib/plantSync';
+import { auth, googleProvider } from './lib/firebase';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithEmailAndPassword,
+  signOut,
+  sendEmailVerification,
+  User
+} from 'firebase/auth';
+import { Lock, CheckCircle, X, ShieldAlert, Mail, Loader2 } from 'lucide-react';
 
 export function App() {
   const [plants, setPlants] = useState<MedicinalPlant[]>([]);
   const [activeTab, setActiveTab] = useState<'map' | 'catalog' | 'dashboard' | 'admin'>('map');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [adminUser, setAdminUser] = useState<User | null>(null);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
-  const [adminPassInput, setAdminPassInput] = useState<string>('');
+  const [adminEmailInput, setAdminEmailInput] = useState<string>('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState<string>('');
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false);
   const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
+  const [needsVerificationUser, setNeedsVerificationUser] = useState<User | null>(null);
+  const [externalPendingSurveys, setExternalPendingSurveys] = useState<PendingCommunitySurvey[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Selected plant for detail modal
@@ -64,7 +83,7 @@ export function App() {
     syncInitialPlantsToFirestore().catch((e) => console.warn('Firestore initial sync check:', e));
 
     // Subscribe to real-time changes across all connected devices (phones, computers, browsers)
-    const unsubscribe = subscribeToPlantsRealtime((cloudPlants) => {
+    const unsubscribePlants = subscribeToPlantsRealtime((cloudPlants) => {
       setPlants(cloudPlants);
       // If currently viewing a plant that got updated on another device, keep detail modal in sync
       setSelectedPlant((prev) => {
@@ -72,6 +91,25 @@ export function App() {
         const updated = cloudPlants.find((p) => p.id === prev.id);
         return updated || prev;
       });
+    });
+
+    // Subscribe to Firebase Authentication state for Admin RBAC
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setIsAdmin(false);
+        setAdminUser(null);
+        return;
+      }
+      const authorized = await checkUserIsAdmin(user);
+      if (authorized) {
+        setIsAdmin(true);
+        setAdminUser(user);
+        setNeedsVerificationUser(null);
+        syncInitialPlantsToFirestore().catch(() => {});
+      } else {
+        setIsAdmin(false);
+        setAdminUser(null);
+      }
     });
 
     // Run automatic daily backup snapshot check
@@ -99,9 +137,24 @@ export function App() {
     }
 
     return () => {
-      unsubscribe();
+      unsubscribePlants();
+      unsubscribeAuth();
     };
   }, []);
+
+  // Subscribe to pending community monitoring logs (/surveys) only when Admin is authenticated
+  useEffect(() => {
+    if (!isAdmin) {
+      setExternalPendingSurveys([]);
+      return;
+    }
+    const unsubscribeSurveys = subscribeToPendingSurveysRealtime((surveys) => {
+      setExternalPendingSurveys(surveys);
+    });
+    return () => {
+      unsubscribeSurveys();
+    };
+  }, [isAdmin]);
 
   // Handle open plant detail
   const handleSelectPlant = (plant: MedicinalPlant) => {
@@ -173,8 +226,13 @@ export function App() {
 
   // Admin approval handlers for individual monitoring logs
   const handleApproveMonitoringLog = (plantId: string, logId: string) => {
-    const updated = approvePlantMonitoringLog(plantId, logId);
+    const ext = externalPendingSurveys.find((s) => s.id === logId);
+    const reviewerLabel = adminUser?.email ? `Ban Quản trị (${adminUser.email})` : 'Ban Quản trị (Admin)';
+    const updated = approvePlantMonitoringLog(plantId, logId, reviewerLabel, ext);
     setPlants(updated);
+    if (ext) {
+      setExternalPendingSurveys((prev) => prev.filter((s) => s.id !== logId));
+    }
     const updatedPlant = updated.find((p) => p.id === plantId);
     if (updatedPlant) {
       setSelectedPlant(updatedPlant);
@@ -183,8 +241,12 @@ export function App() {
   };
 
   const handleRejectMonitoringLog = (plantId: string, logId: string, reason?: string) => {
-    const updated = rejectPlantMonitoringLog(plantId, logId, reason);
+    const ext = externalPendingSurveys.find((s) => s.id === logId);
+    const updated = rejectPlantMonitoringLog(plantId, logId, reason, ext);
     setPlants(updated);
+    if (ext) {
+      setExternalPendingSurveys((prev) => prev.filter((s) => s.id !== logId));
+    }
     const updatedPlant = updated.find((p) => p.id === plantId);
     if (updatedPlant) {
       setSelectedPlant(updatedPlant);
@@ -216,21 +278,127 @@ export function App() {
     setActiveTab('map');
   };
 
-  const handleAdminLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (verifyAdminPasscode(adminPassInput)) {
-      setIsAdmin(true);
-      setIsAdminLoginOpen(false);
-      setAdminPassInput('');
-      setAdminLoginError(null);
-      setActiveTab('admin');
-      showToast('Đăng nhập Ban Quản trị thành công!');
-    } else {
-      setAdminLoginError('Mật khẩu quản trị không chính xác.');
+  const formatAuthErrorMessage = (err: unknown): string => {
+    const code = (err as { code?: string })?.code || '';
+    switch (code) {
+      case 'auth/popup-closed-by-user':
+        return 'Bạn đã đóng cửa sổ đăng nhập Google.';
+      case 'auth/popup-blocked':
+        return 'Trình duyệt đang chặn cửa sổ bật lên (Popup). Vui lòng cho phép popup và thử lại.';
+      case 'auth/unauthorized-domain':
+        return 'Tên miền hiện tại chưa được cấp phép trong Firebase Authentication (Authorized domains).';
+      case 'auth/operation-not-allowed':
+        return 'Phương thức đăng nhập Email/Mật khẩu chưa được bật trong Firebase Console.';
+      case 'auth/invalid-credential':
+      case 'auth/wrong-password':
+      case 'auth/user-not-found':
+        return 'Email hoặc mật khẩu quản trị không chính xác.';
+      case 'auth/invalid-email':
+        return 'Địa chỉ Email không đúng định dạng.';
+      case 'auth/too-many-requests':
+        return 'Thao tác quá nhiều lần. Vui lòng thử lại sau ít phút.';
+      default:
+        return err instanceof Error ? err.message : 'Đăng nhập thất bại. Vui lòng thử lại.';
     }
   };
 
-  const pendingCount = plants.filter((p) => p.status === 'pending').length;
+  const handleGoogleAdminLogin = async () => {
+    setIsAuthLoading(true);
+    setAdminLoginError(null);
+    setNeedsVerificationUser(null);
+    try {
+      const cred = await signInWithPopup(auth, googleProvider);
+      const authorized = await checkUserIsAdmin(cred.user);
+      if (authorized) {
+        setIsAdmin(true);
+        setAdminUser(cred.user);
+        setIsAdminLoginOpen(false);
+        setActiveTab('admin');
+        showToast(`Đăng nhập Ban Quản trị (${cred.user.email}) thành công!`);
+      } else {
+        await signOut(auth);
+        setIsAdmin(false);
+        setAdminUser(null);
+        setAdminLoginError(
+          `Tài khoản Google "${cred.user.email || 'này'}" chưa được cấp quyền Ban Quản trị HerbMap Tam Anh.`
+        );
+      }
+    } catch (err) {
+      setAdminLoginError(formatAuthErrorMessage(err));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleEmailAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminEmailInput.trim() || !adminPasswordInput) {
+      setAdminLoginError('Vui lòng nhập đầy đủ Email và Mật khẩu.');
+      return;
+    }
+    setIsAuthLoading(true);
+    setAdminLoginError(null);
+    setNeedsVerificationUser(null);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, adminEmailInput.trim(), adminPasswordInput);
+      if (!cred.user.emailVerified) {
+        setNeedsVerificationUser(cred.user);
+        setAdminLoginError(
+          'Email của tài khoản này chưa được xác minh (email_verified). Vui lòng xác minh Email trước khi truy cập quyền Quản trị hoặc dùng nút Đăng nhập Google.'
+        );
+        return;
+      }
+      const authorized = await checkUserIsAdmin(cred.user);
+      if (authorized) {
+        setIsAdmin(true);
+        setAdminUser(cred.user);
+        setIsAdminLoginOpen(false);
+        setAdminEmailInput('');
+        setAdminPasswordInput('');
+        setAdminLoginError(null);
+        setActiveTab('admin');
+        showToast(`Đăng nhập Ban Quản trị (${cred.user.email}) thành công!`);
+      } else {
+        await signOut(auth);
+        setIsAdmin(false);
+        setAdminUser(null);
+        setAdminLoginError(
+          `Tài khoản "${cred.user.email || 'này'}" chưa được cấp quyền Ban Quản trị HerbMap Tam Anh.`
+        );
+      }
+    } catch (err) {
+      setAdminLoginError(formatAuthErrorMessage(err));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleResendVerificationEmail = async () => {
+    if (!needsVerificationUser) return;
+    setIsAuthLoading(true);
+    try {
+      await sendEmailVerification(needsVerificationUser);
+      showToast(`Đã gửi email xác minh đến ${needsVerificationUser.email}. Hãy kiểm tra hộp thư!`);
+    } catch (err) {
+      setAdminLoginError(formatAuthErrorMessage(err));
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleLogoutAdmin = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn('Sign out warning:', err);
+    }
+    setIsAdmin(false);
+    setAdminUser(null);
+    setActiveTab('map');
+    showToast('Đã đăng xuất quyền Quản trị.');
+  };
+
+  const pendingCount = plants.filter((p) => p.status === 'pending').length + (isAdmin ? externalPendingSurveys.length : 0);
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans selection:bg-emerald-200 selection:text-emerald-900">
@@ -257,11 +425,7 @@ export function App() {
         onOpenAbout={() => setIsAboutModalOpen(true)}
         isAdmin={isAdmin}
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
-        onLogoutAdmin={() => {
-          setIsAdmin(false);
-          setActiveTab('map');
-          showToast('Đã đăng xuất quyền Quản trị.');
-        }}
+        onLogoutAdmin={handleLogoutAdmin}
         totalPlantsCount={plants.length}
         pendingCount={pendingCount}
         plants={plants}
@@ -308,18 +472,18 @@ export function App() {
             onPlantsUpdated={(updated) => setPlants(updated)}
             onSelectPlant={handleSelectPlant}
             onLocateOnMap={handleLocateOnMap}
-            onLogoutAdmin={() => {
-              setIsAdmin(false);
-              setActiveTab('map');
-            }}
+            onLogoutAdmin={handleLogoutAdmin}
+            adminEmail={adminUser?.email}
+            externalPendingSurveys={externalPendingSurveys}
+            onExternalSurveysUpdated={setExternalPendingSurveys}
           />
         )}
       </main>
 
-      {/* Admin Login Modal */}
+      {/* Admin Login Modal (Firebase Authentication: Google & Email/Password) */}
       {isAdminLoginOpen && (
         <div className="fixed inset-0 z-50 bg-stone-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl border border-stone-200 text-stone-800 space-y-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-stone-200 text-stone-800 space-y-4">
             <div className="flex items-center justify-between">
               <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center">
                 <Lock className="w-5 h-5" />
@@ -328,6 +492,7 @@ export function App() {
                 onClick={() => {
                   setIsAdminLoginOpen(false);
                   setAdminLoginError(null);
+                  setNeedsVerificationUser(null);
                 }}
                 className="p-1.5 text-stone-400 hover:text-stone-700 rounded-xl"
               >
@@ -336,35 +501,108 @@ export function App() {
             </div>
 
             <div>
-              <h3 className="font-bold text-base text-stone-900">Đăng nhập Ban Quản Trị</h3>
+              <h3 className="font-bold text-base text-stone-900">Đăng nhập Ban Quản Trị (Firebase Auth)</h3>
               <p className="text-xs text-stone-500 mt-1">
-                Dành cho Ban Quản trị kiểm duyệt và quản trị cơ sở dữ liệu thực địa.
+                Xác thực tài khoản Quản trị viên để duyệt phiếu khảo sát, chỉnh sửa hoặc xóa bản ghi trên hệ thống.
               </p>
             </div>
 
-            <form onSubmit={handleAdminLoginSubmit} className="space-y-3">
+            {/* Google Sign-In Button */}
+            <button
+              type="button"
+              onClick={handleGoogleAdminLogin}
+              disabled={isAuthLoading}
+              className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-stone-50 text-stone-800 border border-stone-300 font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-2.5 disabled:opacity-60 cursor-pointer"
+            >
+              {isAuthLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+              ) : (
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path
+                    fill="#4285F4"
+                    d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.37 24 12 24Z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14Z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.37 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96Z"
+                  />
+                </svg>
+              )}
+              <span>Đăng nhập bằng tài khoản Google</span>
+            </button>
+
+            <div className="relative flex items-center py-1">
+              <div className="flex-grow border-t border-stone-200"></div>
+              <span className="shrink mx-3 text-[10px] uppercase tracking-wider font-semibold text-stone-400">
+                Hoặc đăng nhập bằng Email
+              </span>
+              <div className="flex-grow border-t border-stone-200"></div>
+            </div>
+
+            <form onSubmit={handleEmailAdminLogin} className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-stone-700 mb-1">
-                  Mật mã quản trị:
+                  Email quản trị:
+                </label>
+                <div className="relative">
+                  <Mail className="w-3.5 h-3.5 absolute left-3 top-3 text-stone-400" />
+                  <input
+                    type="email"
+                    value={adminEmailInput}
+                    onChange={(e) => setAdminEmailInput(e.target.value)}
+                    placeholder="admin@example.com"
+                    className="w-full text-xs pl-8 pr-3 py-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Mật khẩu:
                 </label>
                 <input
                   type="password"
-                  value={adminPassInput}
-                  onChange={(e) => setAdminPassInput(e.target.value)}
-                  placeholder="Nhập mật mã..."
+                  value={adminPasswordInput}
+                  onChange={(e) => setAdminPasswordInput(e.target.value)}
+                  placeholder="Nhập mật khẩu tài khoản..."
                   className="w-full text-xs p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
-                  autoFocus
                 />
-                {adminLoginError && (
-                  <p className="text-rose-600 text-[11px] mt-1 font-medium">{adminLoginError}</p>
-                )}
               </div>
+
+              {adminLoginError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-medium space-y-1.5">
+                  <div className="flex items-start gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-600" />
+                    <span>{adminLoginError}</span>
+                  </div>
+                  {needsVerificationUser && (
+                    <button
+                      type="button"
+                      onClick={handleResendVerificationEmail}
+                      disabled={isAuthLoading}
+                      className="text-amber-800 underline font-bold hover:text-amber-950 block"
+                    >
+                      Gửi lại email xác minh
+                    </button>
+                  )}
+                </div>
+              )}
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-colors"
+                disabled={isAuthLoading}
+                className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-md transition-colors disabled:opacity-60 flex items-center justify-center gap-2 cursor-pointer"
               >
-                Xác nhận đăng nhập
+                {isAuthLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Đăng nhập bằng Email</span>
               </button>
             </form>
           </div>

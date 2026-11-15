@@ -19,7 +19,10 @@ import { INITIAL_PLANTS_DATA } from '../data/plants';
 import { 
   savePlantToFirestore, 
   deletePlantFromFirestore, 
-  batchSavePlantsToFirestore 
+  batchSavePlantsToFirestore,
+  createPendingSurveyLogInFirestore,
+  deletePendingSurveyLogFromFirestore,
+  PendingCommunitySurvey
 } from '../lib/plantSync';
 import {
   idbSaveAllPlants,
@@ -29,10 +32,8 @@ import {
 } from './idbStorage';
 
 const STORAGE_KEY = 'herbmap_tamanh_plants_v2';
-const ADMIN_PASSCODE_KEY = 'herbmap_tamanh_admin_pw';
 const BACKUPS_STORAGE_KEY = 'herbmap_tamanh_backups_v1';
 const AUTO_BACKUP_ENABLED_KEY = 'herbmap_tamanh_auto_backup_enabled';
-const DEFAULT_PASSCODE = 'admin2026';
 
 // Active in-memory caches to ensure ultra-fast and complete synchronous access
 let inMemoryPlantsCache: MedicinalPlant[] | null = null;
@@ -394,7 +395,13 @@ export function getNextSpeciesId(currentPlants: MedicinalPlant[]): string {
       }
     }
   });
-  return `TA-HERB-${String(maxNum + 1).padStart(3, '0')}`;
+  let nextNum = maxNum + 1;
+  let candidate = `TA-HERB-${String(nextNum).padStart(3, '0')}`;
+  while (currentPlants.some((p) => p.id === candidate)) {
+    nextNum += 1;
+    candidate = `TA-HERB-${String(nextNum).padStart(3, '0')}`;
+  }
+  return candidate;
 }
 
 export function getNextLocationIdForSpecies(baseSpeciesId: string, currentPlants: MedicinalPlant[]): string {
@@ -415,7 +422,13 @@ export function getNextLocationIdForSpecies(baseSpeciesId: string, currentPlants
     }
   });
 
-  return `${rootId}-LOC${maxLocNum + 1}`;
+  let nextLoc = maxLocNum + 1;
+  let candidate = `${rootId}-LOC${nextLoc}`;
+  while (currentPlants.some((p) => p.id === candidate)) {
+    nextLoc += 1;
+    candidate = `${rootId}-LOC${nextLoc}`;
+  }
+  return candidate;
 }
 
 export function addPlant(
@@ -467,9 +480,10 @@ export function addPlant(
   // 2. CASE: Survey for an EXISTING species in the database
   if (matchedBaseSpecies) {
     const isNewLocation = isDifferentLocation(matchedBaseSpecies.location, plant.location);
+    const isPendingSubmission = plant.status === 'pending' || resolvedOccurrenceStatus === 'new';
 
-    if (isNewLocation) {
-      // Create a NEW survey location point on the map!
+    if (isNewLocation || isPendingSubmission) {
+      // Create a NEW survey location point on the map (strictly create-only in Firestore for pending surveys)
       const newPointId = getNextLocationIdForSpecies(matchedBaseSpecies.id, currentPlants);
       const surveyApprovalStatus = plant.status === 'pending' ? 'pending' : 'approved';
 
@@ -517,7 +531,9 @@ export function addPlant(
 
       const updatedList = deduplicatePlants([newSurveyPoint, ...currentPlants]);
       savePlants(updatedList);
-      savePlantToFirestore(newSurveyPoint);
+      savePlantToFirestore(newSurveyPoint, true).catch((err) => {
+        console.error('Failed to sync new survey point to Firestore:', err);
+      });
       return newSurveyPoint;
     } else {
       // Same exact location -> update/enrich existing record
@@ -602,7 +618,9 @@ export function addPlant(
 
   const updatedList = deduplicatePlants([newPlant, ...currentPlants]);
   savePlants(updatedList);
-  savePlantToFirestore(newPlant);
+  savePlantToFirestore(newPlant, true).catch((err) => {
+    console.error('Failed to sync new plant to Firestore:', err);
+  });
   return newPlant;
 }
 
@@ -780,14 +798,30 @@ export function addPlantMonitoringLog(
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
-  savePlantToFirestore(updatedPlant);
+
+  if (isAdmin) {
+    savePlantToFirestore(updatedPlant).catch((err) => {
+      console.error('Failed to save admin monitoring log to Firestore:', err);
+    });
+  } else {
+    // Public users cannot update /plants directly; queue pending report in /surveys/{logId}
+    createPendingSurveyLogInFirestore({
+      ...newLog,
+      plantId: plant.id,
+      plantName: plant.vietnameseName,
+      plantScientificName: plant.scientificName,
+    }).catch((err) => {
+      console.error('Failed to submit pending monitoring survey to Firestore:', err);
+    });
+  }
   return getStoredPlants();
 }
 
 export function approvePlantMonitoringLog(
   plantId: string,
   logId: string,
-  reviewerName: string = 'Ban Quản trị (Admin)'
+  reviewerName: string = 'Ban Quản trị (Admin)',
+  externalPendingLog?: PendingCommunitySurvey
 ): MedicinalPlant[] {
   const currentPlants = getStoredPlants();
   const index = currentPlants.findIndex((p) => p.id === plantId);
@@ -796,8 +830,9 @@ export function approvePlantMonitoringLog(
   const plant = currentPlants[index];
   const now = new Date().toISOString();
   const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
-  
-  const updatedLogs = existingLogs.map((log) => {
+  const hasExisting = existingLogs.some((l) => l.id === logId);
+
+  let updatedLogs = existingLogs.map((log) => {
     if (log.id === logId) {
       return {
         ...log,
@@ -809,6 +844,25 @@ export function approvePlantMonitoringLog(
     return log;
   });
 
+  if (!hasExisting && externalPendingLog) {
+    const approvedExternal: PlantMonitoringLog = {
+      id: externalPendingLog.id,
+      date: externalPendingLog.date,
+      status: externalPendingLog.status,
+      conservationStatus: externalPendingLog.conservationStatus,
+      statusNote: externalPendingLog.statusNote,
+      surveyor: externalPendingLog.surveyor,
+      contactPhone: externalPendingLog.contactPhone,
+      evidencePhoto: externalPendingLog.evidencePhoto,
+      createdAt: externalPendingLog.createdAt,
+      submittedByRole: externalPendingLog.submittedByRole || 'public',
+      approvalStatus: 'approved',
+      reviewedBy: reviewerName,
+      reviewedAt: now,
+    };
+    updatedLogs = [approvedExternal, ...updatedLogs];
+  }
+
   const resolved = resolvePlantOccurrenceStatus(
     updatedLogs,
     plant.occurrenceStatus,
@@ -828,14 +882,18 @@ export function approvePlantMonitoringLog(
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
-  savePlantToFirestore(updatedPlant);
+  savePlantToFirestore(updatedPlant).catch((err) => {
+    console.error('Failed to approve monitoring log on plant doc:', err);
+  });
+  deletePendingSurveyLogFromFirestore(logId).catch(() => {});
   return getStoredPlants();
 }
 
 export function rejectPlantMonitoringLog(
   plantId: string,
   logId: string,
-  rejectionReason?: string
+  rejectionReason?: string,
+  externalPendingLog?: PendingCommunitySurvey
 ): MedicinalPlant[] {
   const currentPlants = getStoredPlants();
   const index = currentPlants.findIndex((p) => p.id === plantId);
@@ -844,8 +902,9 @@ export function rejectPlantMonitoringLog(
   const plant = currentPlants[index];
   const now = new Date().toISOString();
   const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
+  const hasExisting = existingLogs.some((l) => l.id === logId);
 
-  const updatedLogs = existingLogs.map((log) => {
+  let updatedLogs = existingLogs.map((log) => {
     if (log.id === logId) {
       return {
         ...log,
@@ -857,6 +916,25 @@ export function rejectPlantMonitoringLog(
     return log;
   });
 
+  if (!hasExisting && externalPendingLog) {
+    const rejectedExternal: PlantMonitoringLog = {
+      id: externalPendingLog.id,
+      date: externalPendingLog.date,
+      status: externalPendingLog.status,
+      conservationStatus: externalPendingLog.conservationStatus,
+      statusNote: externalPendingLog.statusNote,
+      surveyor: externalPendingLog.surveyor,
+      contactPhone: externalPendingLog.contactPhone,
+      evidencePhoto: externalPendingLog.evidencePhoto,
+      createdAt: externalPendingLog.createdAt,
+      submittedByRole: externalPendingLog.submittedByRole || 'public',
+      approvalStatus: 'rejected',
+      rejectionReason: rejectionReason || 'Không đủ căn cứ hoặc hình ảnh không khớp thực địa',
+      reviewedAt: now,
+    };
+    updatedLogs = [rejectedExternal, ...updatedLogs];
+  }
+
   const resolved = resolvePlantOccurrenceStatus(
     updatedLogs,
     plant.occurrenceStatus,
@@ -876,7 +954,10 @@ export function rejectPlantMonitoringLog(
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
-  savePlantToFirestore(updatedPlant);
+  savePlantToFirestore(updatedPlant).catch((err) => {
+    console.error('Failed to reject monitoring log on plant doc:', err);
+  });
+  deletePendingSurveyLogFromFirestore(logId).catch(() => {});
   return getStoredPlants();
 }
 
@@ -911,7 +992,10 @@ export function deletePlantMonitoringLog(
 
   currentPlants[index] = updatedPlant;
   savePlants(currentPlants);
-  savePlantToFirestore(updatedPlant);
+  savePlantToFirestore(updatedPlant).catch((err) => {
+    console.error('Failed to delete monitoring log on plant doc:', err);
+  });
+  deletePendingSurveyLogFromFirestore(logId).catch(() => {});
   return getStoredPlants();
 }
 
@@ -921,14 +1005,21 @@ export interface PendingMonitoringLogItem {
   plantScientificName: string;
   plant: MedicinalPlant;
   log: PlantMonitoringLog;
+  externalPendingSurvey?: PendingCommunitySurvey;
 }
 
-export function getAllPendingMonitoringLogs(plantsList?: MedicinalPlant[]): PendingMonitoringLogItem[] {
+export function getAllPendingMonitoringLogs(
+  plantsList?: MedicinalPlant[],
+  externalPendingSurveys: PendingCommunitySurvey[] = []
+): PendingMonitoringLogItem[] {
   const plants = plantsList || getStoredPlants();
   const list: PendingMonitoringLogItem[] = [];
+  const seenLogIds = new Set<string>();
+
   plants.forEach((plant) => {
     (plant.monitoringLogs || []).forEach((log) => {
       if (log.approvalStatus === 'pending') {
+        seenLogIds.add(log.id);
         list.push({
           plantId: plant.id,
           plantName: plant.vietnameseName,
@@ -939,6 +1030,24 @@ export function getAllPendingMonitoringLogs(plantsList?: MedicinalPlant[]): Pend
       }
     });
   });
+
+  externalPendingSurveys.forEach((survey) => {
+    if (survey.approvalStatus === 'pending' && !seenLogIds.has(survey.id)) {
+      const matchedPlant = plants.find((p) => p.id === survey.plantId);
+      if (matchedPlant) {
+        seenLogIds.add(survey.id);
+        list.push({
+          plantId: matchedPlant.id,
+          plantName: matchedPlant.vietnameseName,
+          plantScientificName: matchedPlant.scientificName,
+          plant: matchedPlant,
+          log: survey,
+          externalPendingSurvey: survey,
+        });
+      }
+    }
+  });
+
   return list.sort((a, b) => new Date(b.log.createdAt).getTime() - new Date(a.log.createdAt).getTime());
 }
 
@@ -1066,15 +1175,6 @@ export function resetToDefaultData(): MedicinalPlant[] {
   return INITIAL_PLANTS_DATA;
 }
 
-export function verifyAdminPasscode(inputCode: string): boolean {
-  const saved = localStorage.getItem(ADMIN_PASSCODE_KEY);
-  if (!saved || saved === 'tamanh2026') {
-    localStorage.setItem(ADMIN_PASSCODE_KEY, DEFAULT_PASSCODE);
-    return inputCode.trim() === DEFAULT_PASSCODE;
-  }
-  return inputCode.trim() === saved || inputCode.trim() === DEFAULT_PASSCODE;
-}
-
 export function exportPlantsAsJSON(plantsList?: MedicinalPlant[]): void {
   const plants = plantsList || getStoredPlants();
   const jsonStr = JSON.stringify(plants, null, 2);
@@ -1200,8 +1300,8 @@ function normalizeImportedPlant(raw: any, indexFallback: number): MedicinalPlant
   }
 
   // Location mapping
-  const lat = typeof raw.location?.lat === 'number' ? raw.location.lat : parseFloat(raw.lat || raw['Vĩ độ (Lat)'] || raw['Vĩ độ'] || '15.4635');
-  const lng = typeof raw.location?.lng === 'number' ? raw.location.lng : parseFloat(raw.lng || raw['Kinh độ (Lng)'] || raw['Kinh độ'] || '108.6185');
+  const lat = typeof raw.location?.lat === 'number' ? raw.location.lat : parseFloat(raw.lat || raw['Vĩ độ (Lat)'] || raw['Vĩ độ'] || '15.4848');
+  const lng = typeof raw.location?.lng === 'number' ? raw.location.lng : parseFloat(raw.lng || raw['Kinh độ (Lng)'] || raw['Kinh độ'] || '108.5840');
   const addressDescription = String(raw.location?.addressDescription || raw.addressDescription || raw['Mô tả địa chỉ'] || 'Xã Tam Anh, Núi Thành, Quảng Nam');
   
   let communeSection: string = String(raw.location?.communeSection || raw.communeSection || raw['Khu vực Tam Anh'] || raw['Khu vực'] || raw['Thôn'] || 'Thôn Đức Bố');
@@ -1288,8 +1388,8 @@ function normalizeImportedPlant(raw: any, indexFallback: number): MedicinalPlant
     habitat,
     habitatCategory,
     location: {
-      lat: isNaN(lat) ? 15.4635 : lat,
-      lng: isNaN(lng) ? 108.6185 : lng,
+      lat: isNaN(lat) ? 15.4848 : lat,
+      lng: isNaN(lng) ? 108.5840 : lng,
       addressDescription,
       communeSection
     },
@@ -1509,8 +1609,8 @@ export function importPlantsFromCSV(csvText: string, mode: 'merge' | 'replace' =
         family: famIdx >= 0 && row[famIdx] ? row[famIdx] : 'Chưa phân loại',
         genus: genIdx >= 0 && row[genIdx] ? row[genIdx] : undefined,
         habitat: habIdx >= 0 && row[habIdx] ? row[habIdx] : 'Vườn nhà & bờ rào nương rẫy',
-        lat: latIdx >= 0 && row[latIdx] ? parseFloat(row[latIdx]) : 15.4635,
-        lng: lngIdx >= 0 && row[lngIdx] ? parseFloat(row[lngIdx]) : 108.6185,
+        lat: latIdx >= 0 && row[latIdx] ? parseFloat(row[latIdx]) : 15.4848,
+        lng: lngIdx >= 0 && row[lngIdx] ? parseFloat(row[lngIdx]) : 108.5840,
         communeSection: comIdx >= 0 && row[comIdx] ? row[comIdx] : 'Tam Anh Bắc',
         conservationStatus: conIdx >= 0 && row[conIdx] ? row[conIdx] : 'Đã ghi nhận',
         folkRemedies: remIdx >= 0 && row[remIdx] ? row[remIdx] : '',

@@ -1,15 +1,203 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Public read and write for medicinal plants real-time collaboration in Herbmap Tam Anh
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable security helpers
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isCoreAdminEmail() {
+      return isVerifiedUser() && (
+        request.auth.token.email in ['huynhanhbk.92@gmail.com', 'lenhu101293@gmail.com']
+      );
+    }
+
+    function isAdmin() {
+      return isCoreAdminEmail() || (
+        isVerifiedUser() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidPlant(data) {
+      return data.keys().hasAll([
+          'id', 'vietnameseName', 'scientificName', 'family', 'coverImage',
+          'shortDescription', 'habitat', 'habitatCategory', 'location',
+          'conservationStatus', 'traditionalUses', 'dataSource', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'vietnameseName', 'otherNames', 'scientificName', 'family', 'genus', 'species',
+          'coverImage', 'photos', 'shortDescription', 'identificationTraits', 'habitat',
+          'habitatCategory', 'location', 'conservationStatus', 'conservationLevel',
+          'traditionalUses', 'dataSource', 'status', 'surveyFrequencyCount', 'trendStatus',
+          'occurrenceStatus', 'isDisappeared', 'monitoringLogs', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.vietnameseName is string && data.vietnameseName.size() > 0 && data.vietnameseName.size() <= 200
+        && data.scientificName is string && data.scientificName.size() <= 200
+        && data.family is string && data.family.size() <= 200
+        && (!('genus' in data) || (data.genus is string && data.genus.size() <= 200))
+        && (!('species' in data) || (data.species is string && data.species.size() <= 200))
+        && data.coverImage is string && data.coverImage.size() <= 900000
+        && data.shortDescription is string && data.shortDescription.size() <= 3000
+        && data.habitat is string && data.habitat.size() <= 500
+        && data.habitatCategory is string && data.habitatCategory.size() <= 64
+        && data.conservationStatus is string && data.conservationStatus.size() <= 64
+        && data.conservationStatus in ['Đã ghi nhận', 'Biến mất', 'Điểm mới (Chờ duyệt)']
+        && (!('conservationLevel' in data) || (data.conservationLevel is string && data.conservationLevel.size() <= 64))
+        && data.status is string && data.status.size() <= 32
+        && data.status in ['verified', 'pending']
+        && (!('occurrenceStatus' in data) || (data.occurrenceStatus is string && data.occurrenceStatus.size() <= 32 && data.occurrenceStatus in ['present', 'disappeared', 'new', 'safe', 'degraded']))
+        && (!('isDisappeared' in data) || data.isDisappeared is bool)
+        && (!('surveyFrequencyCount' in data) || (data.surveyFrequencyCount is number && data.surveyFrequencyCount >= 0 && data.surveyFrequencyCount <= 100000))
+        && (!('trendStatus' in data) || (data.trendStatus is string && data.trendStatus.size() <= 32))
+        && (!('otherNames' in data) || (data.otherNames is list && data.otherNames.size() <= 20 && (data.otherNames.size() == 0 || (data.otherNames[0] is string && data.otherNames[0].size() <= 100))))
+        && (!('photos' in data) || (data.photos is list && data.photos.size() <= 12 && (data.photos.size() == 0 || (data.photos[0] is map && data.photos[0].url is string && data.photos[0].url.size() <= 900000))))
+        && (!('monitoringLogs' in data) || (data.monitoringLogs is list && data.monitoringLogs.size() <= 100 && (data.monitoringLogs.size() == 0 || (data.monitoringLogs[0] is map && data.monitoringLogs[0].id is string && data.monitoringLogs[0].id.size() <= 128))))
+        && (!('identificationTraits' in data) || (
+          data.identificationTraits is map
+          && (!('growthForm' in data.identificationTraits) || (data.identificationTraits.growthForm is string && data.identificationTraits.growthForm.size() <= 1000))
+          && (!('leaves' in data.identificationTraits) || (data.identificationTraits.leaves is string && data.identificationTraits.leaves.size() <= 1000))
+          && (!('flowers' in data.identificationTraits) || (data.identificationTraits.flowers is string && data.identificationTraits.flowers.size() <= 1000))
+          && (!('fruits' in data.identificationTraits) || (data.identificationTraits.fruits is string && data.identificationTraits.fruits.size() <= 1000))
+          && (!('roots' in data.identificationTraits) || (data.identificationTraits.roots is string && data.identificationTraits.roots.size() <= 1000))
+        ))
+        && data.location is map
+        && data.location.lat is number && data.location.lat >= -90 && data.location.lat <= 90
+        && data.location.lng is number && data.location.lng >= -180 && data.location.lng <= 180
+        && data.location.addressDescription is string && data.location.addressDescription.size() <= 500
+        && data.location.communeSection is string && data.location.communeSection.size() <= 200
+        && data.traditionalUses is map
+        && data.traditionalUses.folkRemedies is list && data.traditionalUses.folkRemedies.size() <= 30
+        && data.traditionalUses.partUsed is list && data.traditionalUses.partUsed.size() <= 30
+        && data.traditionalUses.preparation is string && data.traditionalUses.preparation.size() <= 2000
+        && data.traditionalUses.informantName is string && data.traditionalUses.informantName.size() <= 200
+        && data.traditionalUses.hasConsent is bool
+        && data.dataSource is map
+        && data.dataSource.type is string && data.dataSource.type.size() <= 64
+        && data.dataSource.title is string && data.dataSource.title.size() <= 300
+        && data.dataSource.surveyor is string && data.dataSource.surveyor.size() > 0 && data.dataSource.surveyor.size() <= 200
+        && data.dataSource.surveyDate is string && data.dataSource.surveyDate.size() <= 32
+        && (!('surveyorPhone' in data.dataSource) || (data.dataSource.surveyorPhone is string && data.dataSource.surveyorPhone.size() <= 40))
+        && (!('surveyorAddress' in data.dataSource) || (data.dataSource.surveyorAddress is string && data.dataSource.surveyorAddress.size() <= 400))
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && data.updatedAt is string && data.updatedAt.size() <= 64;
+    }
+
+    function isPendingCommunityPlantCreate(data, plantId) {
+      return data.id == plantId
+        && data.status == 'pending'
+        && data.occurrenceStatus == 'new'
+        && data.conservationStatus == 'Điểm mới (Chờ duyệt)'
+        && (!('isDisappeared' in data) || data.isDisappeared == false)
+        && (!('surveyFrequencyCount' in data) || data.surveyFrequencyCount == 1)
+        && ('surveyorPhone' in data.dataSource && data.dataSource.surveyorPhone is string && data.dataSource.surveyorPhone.size() > 0)
+        && (!('monitoringLogs' in data) || (
+          data.monitoringLogs.size() <= 1 && (
+            data.monitoringLogs.size() == 0 ||
+            (data.monitoringLogs[0].approvalStatus == 'pending' && data.monitoringLogs[0].submittedByRole == 'public')
+          )
+        ));
+    }
+
+    function isValidSurveyReport(data) {
+      return data.keys().hasAll([
+          'id', 'plantId', 'date', 'status', 'statusNote',
+          'surveyor', 'createdAt', 'approvalStatus', 'submittedByRole'
+        ])
+        && data.keys().hasOnly([
+          'id', 'plantId', 'plantName', 'plantScientificName', 'date',
+          'status', 'conservationStatus', 'statusNote', 'surveyor',
+          'contactPhone', 'evidencePhoto', 'createdAt', 'approvalStatus', 'submittedByRole'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.plantId)
+        && (!('plantName' in data) || (data.plantName is string && data.plantName.size() <= 200))
+        && (!('plantScientificName' in data) || (data.plantScientificName is string && data.plantScientificName.size() <= 200))
+        && data.date is string && data.date.size() <= 32
+        && data.status is string && data.status.size() <= 32 && data.status in ['present', 'disappeared', 'new']
+        && (!('conservationStatus' in data) || (data.conservationStatus is string && data.conservationStatus.size() <= 64))
+        && data.statusNote is string && data.statusNote.size() > 0 && data.statusNote.size() <= 2000
+        && data.surveyor is string && data.surveyor.size() > 0 && data.surveyor.size() <= 200
+        && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 40))
+        && (!('evidencePhoto' in data) || (data.evidencePhoto is string && data.evidencePhoto.size() <= 900000))
+        && data.createdAt is string && data.createdAt.size() <= 64
+        && data.approvalStatus is string && data.approvalStatus.size() <= 32 && data.approvalStatus in ['pending', 'approved', 'rejected']
+        && data.submittedByRole is string && data.submittedByRole.size() <= 32 && data.submittedByRole in ['public', 'admin'];
+    }
+
+    // 1. Medicinal Plants Collection
     match /plants/{plantId} {
-      allow read, write: if true;
+      allow get: if isValidId(plantId);
+      allow list: if true;
+
+      // Community can ONLY create new pending survey points; Admins can create any valid plant
+      allow create: if isValidId(plantId)
+        && isValidPlant(incoming())
+        && (isAdmin() || isPendingCommunityPlantCreate(incoming(), plantId));
+
+      // Only authenticated Admins can approve (verified), edit, or delete plant records
+      allow update: if isValidId(plantId)
+        && isAdmin()
+        && isValidPlant(incoming())
+        && incoming().id == existing().id;
+
+      allow delete: if isValidId(plantId) && isAdmin();
     }
+
+    // 2. Community Field Monitoring Reports Queue
     match /surveys/{surveyId} {
-      allow read, write: if true;
+      allow get: if isValidId(surveyId) && isAdmin();
+      allow list: if isCoreAdminEmail();
+      allow create: if isValidId(surveyId)
+        && isValidSurveyReport(incoming())
+        && incoming().id == surveyId
+        && incoming().approvalStatus == 'pending'
+        && incoming().submittedByRole == 'public';
+      allow update: if isValidId(surveyId) && isAdmin() && isValidSurveyReport(incoming());
+      allow delete: if isValidId(surveyId) && isAdmin();
     }
+
+    // 3. Authorized Admin Roles Directory
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isVerifiedUser() && (request.auth.uid == adminId || isCoreAdminEmail());
+      allow list: if isCoreAdminEmail();
+      allow create, update: if isValidId(adminId)
+        && isCoreAdminEmail()
+        && incoming().keys().hasAll(['email', 'active'])
+        && incoming().keys().hasOnly(['email', 'name', 'active'])
+        && incoming().email is string && incoming().email.size() <= 200
+        && (!('name' in incoming()) || (incoming().name is string && incoming().name.size() <= 200))
+        && incoming().active is bool;
+      allow delete: if isValidId(adminId) && isCoreAdminEmail();
+    }
+
+    // 4. Connection Health Check Document
     match /system_metadata/{docId} {
-      allow read, write: if true;
+      allow get: if isValidId(docId) && docId == 'connection';
+      allow list, write: if false;
     }
   }
 }

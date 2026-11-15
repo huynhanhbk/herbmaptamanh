@@ -1,34 +1,110 @@
 {
   "entities": {
-    "plants": {
+    "Plant": {
       "title": "Cây thuốc & Điểm phân bố",
       "description": "Danh lục các cây thuốc và tọa độ thực địa xã Tam Anh",
-      "fields": {
-        "id": { "type": "string", "description": "Mã định danh cây thuốc, ví dụ TA-HERB-001" },
-        "vietnameseName": { "type": "string", "description": "Tên tiếng Việt" },
-        "scientificName": { "type": "string", "description": "Tên khoa học" },
-        "family": { "type": "string", "description": "Họ thực vật" },
-        "genus": { "type": "string", "description": "Chi thực vật" },
-        "species": { "type": "string", "description": "Loài thực vật" },
-        "coverImage": { "type": "string", "description": "Ảnh đại diện" },
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Mã định danh cây thuốc, ví dụ TA-HERB-001" },
+        "vietnameseName": { "type": "string", "maxLength": 200, "description": "Tên tiếng Việt" },
+        "otherNames": { "type": "array", "description": "Tên gọi dân gian khác" },
+        "scientificName": { "type": "string", "maxLength": 200, "description": "Tên khoa học" },
+        "family": { "type": "string", "maxLength": 200, "description": "Họ thực vật" },
+        "genus": { "type": "string", "maxLength": 200, "description": "Chi thực vật" },
+        "species": { "type": "string", "maxLength": 200, "description": "Loài thực vật" },
+        "coverImage": { "type": "string", "maxLength": 900000, "description": "Ảnh đại diện" },
         "photos": { "type": "array", "description": "Danh sách hình ảnh thực địa" },
-        "shortDescription": { "type": "string", "description": "Mô tả ngắn" },
+        "shortDescription": { "type": "string", "maxLength": 3000, "description": "Mô tả ngắn" },
         "identificationTraits": { "type": "object", "description": "Đặc điểm nhận dạng" },
-        "habitat": { "type": "string", "description": "Sinh cảnh" },
-        "habitatCategory": { "type": "string", "description": "Phân loại sinh cảnh" },
+        "habitat": { "type": "string", "maxLength": 500, "description": "Sinh cảnh" },
+        "habitatCategory": { "type": "string", "maxLength": 64, "description": "Phân loại sinh cảnh" },
         "location": { "type": "object", "description": "Tọa độ vĩ độ, kinh độ và địa chỉ" },
-        "conservationStatus": { "type": "string", "description": "Hiện trạng thực địa ('Đã ghi nhận' | 'Biến mất' | 'Điểm mới (Chờ duyệt)')" },
-        "conservationLevel": { "type": "string", "description": "Mức độ bảo tồn" },
+        "conservationStatus": { "type": "string", "enum": ["Đã ghi nhận", "Biến mất", "Điểm mới (Chờ duyệt)"], "description": "Hiện trạng thực địa" },
+        "conservationLevel": { "type": "string", "maxLength": 64, "description": "Mức độ bảo tồn" },
         "traditionalUses": { "type": "object", "description": "Tri thức dân gian và bài thuốc" },
-        "dataSource": { "type": "object", "description": "Nguồn dữ liệu và người khảo sát" },
-        "status": { "type": "string", "description": "Trạng thái duyệt ('verified' | 'pending')" },
+        "dataSource": { "type": "object", "description": "Nguồn dữ liệu và thông tin người khảo sát" },
+        "status": { "type": "string", "enum": ["verified", "pending"], "description": "Trạng thái duyệt ('verified' | 'pending')" },
         "surveyFrequencyCount": { "type": "number", "description": "Tần suất ghi nhận khảo sát" },
-        "occurrenceStatus": { "type": "string", "description": "Hiện trạng tồn tại ('present' | 'disappeared' | 'new')" },
+        "occurrenceStatus": { "type": "string", "enum": ["present", "disappeared", "new"], "description": "Hiện trạng tồn tại" },
         "isDisappeared": { "type": "boolean", "description": "Đã biến mất tại tọa độ này hay chưa" },
         "monitoringLogs": { "type": "array", "description": "Lịch sử các đợt khảo sát" },
-        "createdAt": { "type": "string", "description": "Thời gian tạo ISO" },
-        "updatedAt": { "type": "string", "description": "Thời gian cập nhật ISO" }
-      }
+        "createdAt": { "type": "string", "maxLength": 64, "description": "Thời gian tạo ISO" },
+        "updatedAt": { "type": "string", "maxLength": 64, "description": "Thời gian cập nhật ISO" }
+      },
+      "required": [
+        "id",
+        "vietnameseName",
+        "scientificName",
+        "family",
+        "coverImage",
+        "shortDescription",
+        "habitat",
+        "habitatCategory",
+        "location",
+        "conservationStatus",
+        "traditionalUses",
+        "dataSource",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SurveyReport": {
+      "title": "Báo cáo giám sát thực địa từ cộng đồng",
+      "description": "Báo cáo đợt kiểm tra thực địa chờ Ban Quản trị phê duyệt",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "plantId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "plantName": { "type": "string", "maxLength": 200 },
+        "plantScientificName": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string", "maxLength": 32 },
+        "status": { "type": "string", "enum": ["present", "disappeared", "new"] },
+        "conservationStatus": { "type": "string", "maxLength": 64 },
+        "statusNote": { "type": "string", "maxLength": 2000 },
+        "surveyor": { "type": "string", "maxLength": 200 },
+        "contactPhone": { "type": "string", "maxLength": 40 },
+        "evidencePhoto": { "type": "string", "maxLength": 900000 },
+        "createdAt": { "type": "string", "maxLength": 64 },
+        "approvalStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "submittedByRole": { "type": "string", "enum": ["public", "admin"] }
+      },
+      "required": [
+        "id",
+        "plantId",
+        "date",
+        "status",
+        "statusNote",
+        "surveyor",
+        "createdAt",
+        "approvalStatus",
+        "submittedByRole"
+      ]
+    },
+    "AdminUser": {
+      "title": "Tài khoản Ban Quản trị",
+      "description": "Danh sách UID quản trị viên được phép duyệt và chỉnh sửa CSDL",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 200 },
+        "name": { "type": "string", "maxLength": 200 },
+        "active": { "type": "boolean" }
+      },
+      "required": ["email", "active"]
+    }
+  },
+  "firestore": {
+    "/plants/{plantId}": {
+      "schema": { "$ref": "#/entities/Plant" },
+      "description": "Kho dữ liệu cây thuốc thực địa; cộng đồng được tạo phiếu mới ở trạng thái pending, chỉ Admin được duyệt/sửa/xóa"
+    },
+    "/surveys/{surveyId}": {
+      "schema": { "$ref": "#/entities/SurveyReport" },
+      "description": "Hàng đợi báo cáo giám sát thực địa cộng đồng ở trạng thái pending chờ Admin xử lý"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Danh sách UID quản trị viên được cấp quyền"
     }
   }
 }
