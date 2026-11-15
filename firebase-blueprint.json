@@ -20,7 +20,7 @@
         "conservationStatus": { "type": "string", "description": "Hiện trạng thực địa ('Đã ghi nhận' | 'Biến mất' | 'Điểm mới (Chờ duyệt)')" },
         "conservationLevel": { "type": "string", "description": "Mức độ bảo tồn" },
         "traditionalUses": { "type": "object", "description": "Tri thức dân gian và bài thuốc" },
-        "dataSource": { "type": "object", "description": "Nguồn dữ liệu, người khảo sát, địa chỉ và SĐT/Zalo" },
+        "dataSource": { "type": "object", "description": "Nguồn dữ liệu và người khảo sát" },
         "status": { "type": "string", "description": "Trạng thái duyệt ('verified' | 'pending')" },
         "surveyFrequencyCount": { "type": "number", "description": "Tần suất ghi nhận khảo sát" },
         "occurrenceStatus": { "type": "string", "description": "Hiện trạng tồn tại ('present' | 'disappeared' | 'new')" },

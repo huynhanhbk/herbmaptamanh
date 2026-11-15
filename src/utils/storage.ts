@@ -481,7 +481,6 @@ export function addPlant(
         scientificName: matchedBaseSpecies.scientificName || plant.scientificName,
         family: plant.family || matchedBaseSpecies.family,
         genus: plant.genus || matchedBaseSpecies.genus || getPlantGenus(matchedBaseSpecies),
-        species: plant.species || matchedBaseSpecies.species,
         location: plant.location || matchedBaseSpecies.location,
         habitat: plant.habitat || matchedBaseSpecies.habitat,
         habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
@@ -507,7 +506,6 @@ export function addPlant(
             conservationStatus: finalConservationStatus,
             statusNote: `Ghi nhận điểm khảo sát thực địa [${finalConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
             surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
-            contactPhone: plant.dataSource?.surveyorPhone,
             createdAt: now,
             approvalStatus: surveyApprovalStatus,
             submittedByRole: surveyApprovalStatus === 'approved' ? 'admin' : 'public',
@@ -538,7 +536,6 @@ export function addPlant(
         conservationStatus: finalConservationStatus,
         statusNote: `Khảo sát bổ sung tại ${plant.location?.addressDescription || 'vị trí ban đầu'}: Hiện trạng [${finalConservationStatus}].`,
         surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
-        contactPhone: plant.dataSource?.surveyorPhone,
         createdAt: now,
         approvalStatus: plant.status === 'pending' ? 'pending' : 'approved',
         submittedByRole: plant.status === 'pending' ? 'public' : 'admin',
@@ -551,7 +548,6 @@ export function addPlant(
         ...plant,
         id: matchedBaseSpecies.id,
         genus: plant.genus || matchedBaseSpecies.genus || getPlantGenus(matchedBaseSpecies),
-        species: plant.species || matchedBaseSpecies.species,
         photos: mergedPhotos,
         coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
         location: plant.location || matchedBaseSpecies.location,
@@ -582,7 +578,6 @@ export function addPlant(
     ...plant,
     id: newSpeciesId,
     genus: plant.genus || getPlantGenus(plant),
-    species: plant.species,
     surveyFrequencyCount: 1,
     occurrenceStatus: resolvedOccurrenceStatus,
     conservationStatus: finalConservationStatus,
@@ -596,7 +591,6 @@ export function addPlant(
         conservationStatus: finalConservationStatus,
         statusNote: `Khảo sát phát hiện loài cây thuốc [${finalConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
         surveyor: plant.dataSource?.surveyor || 'Nhóm nghiên cứu KHKT Tam Anh',
-        contactPhone: plant.dataSource?.surveyorPhone,
         createdAt: now,
         approvalStatus: newApprovalStatus,
         submittedByRole: newApprovalStatus === 'approved' ? 'admin' : 'public',
@@ -970,7 +964,11 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
     reqConservationStatus = 'Biến mất';
   } else if (updates.occurrenceStatus === 'new') {
     reqConservationStatus = 'Điểm mới (Chờ duyệt)';
-  } else if (updates.status === 'verified' && !current.isDisappeared) {
+  } else if (
+    updates.status === 'verified' &&
+    (current.status === 'pending' || current.occurrenceStatus === 'new' || current.conservationStatus === 'Điểm mới (Chờ duyệt)') &&
+    !current.isDisappeared
+  ) {
     // Auto-transition pending "Điểm mới (Chờ duyệt)" to "Đã ghi nhận" when admin approves
     reqConservationStatus = 'Đã ghi nhận';
   } else if (updates.status === 'pending' && current.status === 'verified' && !current.isDisappeared) {
@@ -1012,21 +1010,6 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
     ? [...updates.monitoringLogs] 
     : (Array.isArray(current.monitoringLogs) ? [...current.monitoringLogs] : []);
 
-  if (updates.status === 'verified') {
-    monitoringLogs = monitoringLogs.map((log) =>
-      log.approvalStatus === 'pending' && log.id.startsWith('log-init-')
-        ? {
-            ...log,
-            status: occurrenceStatus,
-            conservationStatus: reqConservationStatus,
-            approvalStatus: 'approved' as const,
-            reviewedBy: 'Ban Quản trị (Admin)',
-            reviewedAt: now,
-          }
-        : log
-    );
-  }
-
   // Check if status changed by admin edit to record an approved log entry if appropriate
   const statusChanged = reqConservationStatus !== current.conservationStatus || occurrenceStatus !== current.occurrenceStatus;
 
@@ -1057,28 +1040,10 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
     ? updates.genus
     : current.genus || getPlantGenus({ ...current, ...updates });
 
-  const nextDataSource = updates.dataSource
-    ? {
-        ...current.dataSource,
-        ...updates.dataSource,
-        verifiedBy:
-          updates.status === 'verified'
-            ? updates.dataSource.verifiedBy || current.dataSource?.verifiedBy || 'Ban Quản Trị Hệ Thống'
-            : updates.dataSource.verifiedBy,
-      }
-    : updates.status === 'verified'
-    ? {
-        ...current.dataSource,
-        verifiedBy: current.dataSource?.verifiedBy || 'Ban Quản Trị Hệ Thống',
-      }
-    : current.dataSource;
-
   const updatedPlant: MedicinalPlant = {
     ...current,
     ...updates,
     genus: nextGenus,
-    species: updates.species !== undefined ? updates.species : current.species,
-    dataSource: nextDataSource,
     photos,
     coverImage: newCoverImage,
     conservationStatus: reqConservationStatus,
@@ -1130,7 +1095,6 @@ export function exportPlantsAsCSV(plantsList?: MedicinalPlant[]): void {
     'Tên khoa học',
     'Họ thực vật',
     'Chi thực vật',
-    'Loài thực vật',
     'Sinh cảnh',
     'Vĩ độ (Lat)',
     'Kinh độ (Lng)',
@@ -1140,9 +1104,6 @@ export function exportPlantsAsCSV(plantsList?: MedicinalPlant[]): void {
     'Bộ phận dùng',
     'Cách chế biến',
     'Người cung cấp tư liệu',
-    'Người khảo sát',
-    'Địa chỉ người khảo sát',
-    'SĐT / Zalo người khảo sát',
     'Trạng thái kiểm duyệt',
     'Ngày ghi nhận',
     'Ảnh đại diện',
@@ -1156,7 +1117,6 @@ export function exportPlantsAsCSV(plantsList?: MedicinalPlant[]): void {
       `"${p.scientificName.replace(/"/g, '""')}"`,
       `"${p.family.replace(/"/g, '""')}"`,
       `"${getPlantGenus(p).replace(/"/g, '""')}"`,
-      `"${(p.species || p.vietnameseName).replace(/"/g, '""')}"`,
       `"${p.habitat.replace(/"/g, '""')}"`,
       p.location.lat,
       p.location.lng,
@@ -1166,9 +1126,6 @@ export function exportPlantsAsCSV(plantsList?: MedicinalPlant[]): void {
       `"${(p.traditionalUses.partUsed || []).join('; ').replace(/"/g, '""')}"`,
       `"${(p.traditionalUses.preparation || '').replace(/"/g, '""')}"`,
       `"${(p.traditionalUses.informantName || '').replace(/"/g, '""')}"`,
-      `"${(p.dataSource?.surveyor || '').replace(/"/g, '""')}"`,
-      `"${(p.dataSource?.surveyorAddress || '').replace(/"/g, '""')}"`,
-      `"${(p.dataSource?.surveyorPhone || '').replace(/"/g, '""')}"`,
       `"${p.status === 'verified' ? 'Đã xác nhận' : 'Chờ duyệt'}"`,
       `"${p.dataSource?.surveyDate || ''}"`,
       `"${(p.coverImage || '').replace(/"/g, '""')}"`,
@@ -1194,7 +1151,6 @@ function normalizeImportedPlant(raw: any, indexFallback: number): MedicinalPlant
   const scientificName = String(raw.scientificName || raw['Tên khoa học'] || 'Đang xác minh phân loại học').trim();
   const family = String(raw.family || raw['Họ thực vật'] || 'Chưa phân loại').trim();
   const genus = String(raw.genus || raw['Chi thực vật'] || getPlantGenus({ scientificName })).trim();
-  const species = raw.species || raw['Loài thực vật'] ? String(raw.species || raw['Loài thực vật']).trim() : undefined;
   const otherNames = Array.isArray(raw.otherNames) ? raw.otherNames : (raw.otherNames ? String(raw.otherNames).split(',').map((s: string) => s.trim()) : []);
   
   const coverImage = String(raw.coverImage || raw['Ảnh đại diện'] || 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80').trim();
@@ -1325,7 +1281,6 @@ function normalizeImportedPlant(raw: any, indexFallback: number): MedicinalPlant
     scientificName,
     family,
     genus,
-    species,
     coverImage,
     photos,
     shortDescription,
@@ -1353,9 +1308,7 @@ function normalizeImportedPlant(raw: any, indexFallback: number): MedicinalPlant
     dataSource: {
       type: 'field_survey_2026',
       title: 'Dữ liệu nhập từ tệp sao lưu thực địa',
-      surveyor: String(raw.dataSource?.surveyor || raw['Người khảo sát'] || 'Ban Chuyên môn KHKT Tam Anh'),
-      surveyorAddress: raw.dataSource?.surveyorAddress || raw['Địa chỉ người khảo sát'] ? String(raw.dataSource?.surveyorAddress || raw['Địa chỉ người khảo sát']) : undefined,
-      surveyorPhone: raw.dataSource?.surveyorPhone || raw['SĐT / Zalo người khảo sát'] ? String(raw.dataSource?.surveyorPhone || raw['SĐT / Zalo người khảo sát']) : undefined,
+      surveyor: String(raw.dataSource?.surveyor || 'Ban Chuyên môn KHKT Tam Anh'),
       surveyDate,
       verifiedBy: status === 'verified' ? 'Ban Quản trị' : undefined
     },
