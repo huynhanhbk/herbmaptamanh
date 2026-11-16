@@ -24,19 +24,25 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn()
+        && ('email_verified' in request.auth.token)
+        && request.auth.token.email_verified == true;
     }
 
     function isCoreAdminEmail() {
-      return isVerifiedUser() && (
-        request.auth.token.email in ['huynhanhbk.92@gmail.com', 'lenhu101293@gmail.com']
-      );
+      return isVerifiedUser()
+        && ('email' in request.auth.token)
+        && (
+          request.auth.token.email.lower() in ['huynhanhbk.92@gmail.com', 'lenhu101293@gmail.com']
+        );
     }
 
     function isAdmin() {
-      return isCoreAdminEmail() || (
-        isVerifiedUser() &&
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      return isSignedIn() && (
+        isCoreAdminEmail() || (
+          isVerifiedUser() &&
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        )
       );
     }
 
@@ -109,7 +115,7 @@ service cloud.firestore {
     function isPendingCommunityPlantCreate(data, plantId) {
       return data.id == plantId
         && data.status == 'pending'
-        && data.occurrenceStatus == 'new'
+        && ('occurrenceStatus' in data) && data.occurrenceStatus == 'new'
         && data.conservationStatus == 'Điểm mới (Chờ duyệt)'
         && (!('isDisappeared' in data) || data.isDisappeared == false)
         && (!('surveyFrequencyCount' in data) || data.surveyFrequencyCount == 1)
@@ -117,7 +123,14 @@ service cloud.firestore {
         && (!('monitoringLogs' in data) || (
           data.monitoringLogs.size() <= 1 && (
             data.monitoringLogs.size() == 0 ||
-            (data.monitoringLogs[0].approvalStatus == 'pending' && data.monitoringLogs[0].submittedByRole == 'public')
+            (
+              data.monitoringLogs[0] is map
+              && 'approvalStatus' in data.monitoringLogs[0]
+              && 'submittedByRole' in data.monitoringLogs[0]
+              && data.monitoringLogs[0].approvalStatus == 'pending'
+              && data.monitoringLogs[0].submittedByRole == 'public'
+              && (!('status' in data.monitoringLogs[0]) || data.monitoringLogs[0].status in ['present', 'disappeared'])
+            )
           )
         ));
     }
@@ -148,36 +161,58 @@ service cloud.firestore {
         && data.submittedByRole is string && data.submittedByRole.size() <= 32 && data.submittedByRole in ['public', 'admin'];
     }
 
-    // 1. Medicinal Plants Collection
+    // 1. Medicinal Plants Collection (Admin-only writes; public read for map & catalog)
     match /plants/{plantId} {
       allow get: if isValidId(plantId);
       allow list: if true;
 
-      // Community can ONLY create new pending survey points; Admins can create any valid plant
+      // Only authenticated Admins can create, approve/update, or delete records in the main /plants collection
       allow create: if isValidId(plantId)
+        && isSignedIn()
+        && isAdmin()
         && isValidPlant(incoming())
-        && (isAdmin() || isPendingCommunityPlantCreate(incoming(), plantId));
+        && incoming().id == plantId;
 
-      // Only authenticated Admins can approve (verified), edit, or delete plant records
       allow update: if isValidId(plantId)
+        && isSignedIn()
         && isAdmin()
         && isValidPlant(incoming())
         && incoming().id == existing().id;
 
-      allow delete: if isValidId(plantId) && isAdmin();
+      allow delete: if isValidId(plantId) && isSignedIn() && isAdmin();
+    }
+
+    // 2. Community Pending New-Plant Surveys Queue
+    match /pending_surveys/{surveyId} {
+      allow get: if isValidId(surveyId) && isSignedIn() && isAdmin();
+      allow list: if isSignedIn() && isCoreAdminEmail();
+
+      // Community/guests can ONLY create new pending survey submissions here
+      allow create: if isValidId(surveyId)
+        && isValidPlant(incoming())
+        && isPendingCommunityPlantCreate(incoming(), surveyId);
+
+      // Only authenticated Admins can edit or remove pending surveys (e.g. when approving into /plants)
+      allow update: if isValidId(surveyId)
+        && isSignedIn()
+        && isAdmin()
+        && isValidPlant(incoming())
+        && incoming().id == existing().id;
+
+      allow delete: if isValidId(surveyId) && isSignedIn() && isAdmin();
     }
 
     // 2. Community Field Monitoring Reports Queue
     match /surveys/{surveyId} {
-      allow get: if isValidId(surveyId) && isAdmin();
-      allow list: if isCoreAdminEmail();
+      allow get: if isValidId(surveyId) && isSignedIn() && isAdmin();
+      allow list: if isSignedIn() && isCoreAdminEmail();
       allow create: if isValidId(surveyId)
         && isValidSurveyReport(incoming())
         && incoming().id == surveyId
         && incoming().approvalStatus == 'pending'
         && incoming().submittedByRole == 'public';
-      allow update: if isValidId(surveyId) && isAdmin() && isValidSurveyReport(incoming());
-      allow delete: if isValidId(surveyId) && isAdmin();
+      allow update: if isValidId(surveyId) && isSignedIn() && isAdmin() && isValidSurveyReport(incoming());
+      allow delete: if isValidId(surveyId) && isSignedIn() && isAdmin();
     }
 
     // 3. Authorized Admin Roles Directory

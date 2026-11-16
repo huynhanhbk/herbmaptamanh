@@ -11,11 +11,17 @@ import {
 import { User } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { MedicinalPlant, PlantMonitoringLog, PlantPhoto } from '../types';
-import { getStoredPlants, savePlants, deduplicatePlants } from '../utils/storage';
+import {
+  getStoredPlants,
+  deduplicatePlants,
+  mergeMainPlantsWithPending,
+  stripPendingSurveyIdSuffix,
+} from '../utils/storage';
 import { INITIAL_PLANTS_DATA } from '../data/plants';
 import { compressBase64Image } from '../utils/imageCompressor';
 
 const COLLECTION_NAME = 'plants';
+const PENDING_SURVEYS_COLLECTION = 'pending_surveys';
 const SURVEYS_COLLECTION = 'surveys';
 const ADMINS_COLLECTION = 'admins';
 export const ADMIN_EMAILS = [
@@ -318,6 +324,7 @@ export async function fitPlantToFirestoreLimit(plant: MedicinalPlant): Promise<M
     [680, 0.58],
     [520, 0.48],
     [400, 0.38],
+    [320, 0.32],
   ];
 
   for (const [maxDim, quality] of compressionSteps) {
@@ -348,6 +355,15 @@ export async function fitPlantToFirestoreLimit(plant: MedicinalPlant): Promise<M
   if (Array.isArray(working.photos) && working.photos.length > 1) {
     while (working.photos.length > 1 && measureBytes(working) > 880000) {
       working.photos.pop();
+    }
+  }
+
+  if (measureBytes(working) > 880000) {
+    if (Array.isArray(working.photos)) {
+      working.photos = working.photos.filter((ph) => !(ph.url && ph.url.startsWith('data:image') && ph.url.length > 420000));
+    }
+    if (working.coverImage && working.coverImage.startsWith('data:image') && working.coverImage.length > 420000) {
+      working.coverImage = DEFAULT_FALLBACK_IMAGE;
     }
   }
 
@@ -401,10 +417,15 @@ async function resolveAvailablePlantIdInFirestore(candidateId: string): Promise<
 /**
  * Initializes Firestore with existing local / default data if the cloud collection is empty
  * or if the base catalog (TA-HERB-001..015) has not been seeded yet.
- * Only executes seeding writes when an authenticated Admin is signed in (matching firestore.rules).
+ * Only executes Firestore reads and seeding writes when an authenticated Admin is signed in.
  */
 export async function syncInitialPlantsToFirestore(): Promise<void> {
   try {
+    const isAuthorizedAdmin = await checkUserIsAdmin(auth.currentUser);
+    if (!isAuthorizedAdmin) {
+      return;
+    }
+
     const colRef = collection(db, COLLECTION_NAME);
     const snapshot = await getDocs(colRef);
 
@@ -413,11 +434,6 @@ export async function syncInitialPlantsToFirestore(): Promise<void> {
     const hasAnyBaseSpecies = INITIAL_PLANTS_DATA.some((p) => existingIds.has(p.id));
 
     if (snapshot.empty || !hasAnyBaseSpecies) {
-      const isAuthorizedAdmin = await checkUserIsAdmin(auth.currentUser);
-      if (!isAuthorizedAdmin) {
-        return;
-      }
-
       console.log('Seeding initial base plants to cloud Firestore...');
       const batch = writeBatch(db);
       let count = 0;
@@ -528,6 +544,167 @@ export async function deletePlantFromFirestore(plantId: string): Promise<void> {
   } catch (err) {
     handleFirestoreError(err, OperationType.DELETE, path);
   }
+}
+
+/**
+ * Submits a non-admin community new-plant / new-location survey to /pending_surveys/{surveyId}
+ * instead of the main /plants collection, avoiding permission errors and /plants onSnapshot sync conflicts.
+ */
+export async function createPendingPlantInFirestore(plant: MedicinalPlant): Promise<MedicinalPlant> {
+  const fitted = await fitPlantToFirestoreLimit(plant);
+  const sanitized = sanitizePlantForFirestore({
+    ...fitted,
+    status: 'pending',
+    occurrenceStatus: 'new',
+    conservationStatus: 'Điểm mới (Chờ duyệt)',
+    isDisappeared: false,
+    surveyFrequencyCount: 1,
+  });
+
+  const path = `${PENDING_SURVEYS_COLLECTION}/${sanitized.id}`;
+  try {
+    const docRef = doc(db, PENDING_SURVEYS_COLLECTION, sanitized.id);
+    const cleanData = JSON.parse(JSON.stringify(sanitized));
+    await setDoc(docRef, cleanData);
+    return sanitized;
+  } catch (err) {
+    clearPendingPlantUpload(sanitized.id);
+    handleFirestoreError(err, OperationType.CREATE, path);
+  }
+}
+
+/**
+ * Updates a pending plant document inside /pending_surveys/{surveyId} (Admin only).
+ */
+export async function savePendingPlantInFirestore(plant: MedicinalPlant): Promise<void> {
+  if (!plant || !plant.id) return;
+  const fitted = await fitPlantToFirestoreLimit(plant);
+  const sanitized = sanitizePlantForFirestore({
+    ...fitted,
+    status: 'pending',
+    occurrenceStatus: 'new',
+    conservationStatus: 'Điểm mới (Chờ duyệt)',
+    isDisappeared: false,
+  });
+  const path = `${PENDING_SURVEYS_COLLECTION}/${sanitized.id}`;
+  try {
+    const docRef = doc(db, PENDING_SURVEYS_COLLECTION, sanitized.id);
+    await setDoc(docRef, JSON.parse(JSON.stringify(sanitized)), { merge: true });
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, path);
+  }
+}
+
+/**
+ * Deletes a pending survey document from /pending_surveys/{surveyId} (Admin only).
+ */
+export async function deletePendingPlantFromFirestore(pendingId: string): Promise<void> {
+  if (!pendingId) return;
+  const path = `${PENDING_SURVEYS_COLLECTION}/${pendingId}`;
+  try {
+    await deleteDoc(doc(db, PENDING_SURVEYS_COLLECTION, pendingId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, path);
+  }
+}
+
+/**
+ * Promotes an approved survey from /pending_surveys/{pendingId} into /plants/{confirmedId}
+ * and deletes the queue item from /pending_surveys (Admin only).
+ */
+export async function approvePendingPlantInFirestore(
+  pendingId: string,
+  verifiedPlant: MedicinalPlant
+): Promise<MedicinalPlant> {
+  const baseCandidateId = stripPendingSurveyIdSuffix(verifiedPlant.id || pendingId);
+  const fitted = await fitPlantToFirestoreLimit({
+    ...verifiedPlant,
+    id: baseCandidateId,
+    status: 'verified',
+  });
+  let sanitized = sanitizePlantForFirestore(fitted);
+  const oldId = sanitized.id;
+  const confirmedId = await resolveAvailablePlantIdInFirestore(oldId);
+
+  if (confirmedId !== oldId) {
+    sanitized = {
+      ...sanitized,
+      id: confirmedId,
+      monitoringLogs: (sanitized.monitoringLogs || []).map((log) =>
+        log.id === `log-init-${pendingId}`.slice(0, 128) || log.id === `log-init-${oldId}`.slice(0, 128)
+          ? { ...log, id: `log-init-${confirmedId}`.slice(0, 128) }
+          : log
+      ),
+    };
+  }
+
+  const plantPath = `${COLLECTION_NAME}/${sanitized.id}`;
+  try {
+    await setDoc(doc(db, COLLECTION_NAME, sanitized.id), JSON.parse(JSON.stringify(sanitized)));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.CREATE, plantPath);
+  }
+
+  const pendingPath = `${PENDING_SURVEYS_COLLECTION}/${pendingId}`;
+  try {
+    await deleteDoc(doc(db, PENDING_SURVEYS_COLLECTION, pendingId));
+  } catch (err) {
+    handleFirestoreError(err, OperationType.DELETE, pendingPath);
+  }
+
+  return sanitized;
+}
+
+/**
+ * Subscribes to real-time updates of community pending new-plant surveys in /pending_surveys (Admin only).
+ */
+export function subscribeToPendingPlantsRealtime(
+  callback: (pendingPlants: MedicinalPlant[]) => void,
+  onError?: (error: unknown) => void
+): () => void {
+  const colRef = collection(db, PENDING_SURVEYS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const list: MedicinalPlant[] = [];
+      snapshot.forEach((docSnap) => {
+        const raw = docSnap.data() as MedicinalPlant;
+        if (!raw) return;
+        const normalizedLogs = Array.isArray(raw.monitoringLogs)
+          ? raw.monitoringLogs.map((l) => {
+              const safeLogStatus: 'present' | 'disappeared' =
+                l.status === 'disappeared' ? 'disappeared' : 'present';
+              return {
+                ...l,
+                status: safeLogStatus,
+                conservationStatus: (safeLogStatus === 'disappeared'
+                  ? 'Biến mất'
+                  : 'Đã ghi nhận') as PlantMonitoringLog['conservationStatus'],
+              };
+            })
+          : raw.monitoringLogs;
+        list.push({
+          ...raw,
+          id: raw.id || docSnap.id,
+          status: 'pending',
+          occurrenceStatus: 'new',
+          conservationStatus: 'Điểm mới (Chờ duyệt)',
+          isDisappeared: false,
+          ...(normalizedLogs ? { monitoringLogs: normalizedLogs } : {}),
+        });
+      });
+      list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      callback(list);
+    },
+    (err) => {
+      console.warn('Real-time pending_surveys listener warning:', err);
+      if (onError) {
+        onError(err);
+      } else {
+        handleFirestoreError(err, OperationType.LIST, PENDING_SURVEYS_COLLECTION);
+      }
+    }
+  );
 }
 
 /**
@@ -706,10 +883,9 @@ export function subscribeToPlantsRealtime(
         }
       });
 
-      const merged = [...pendingInFlight, ...baseMerged];
-      const deduplicated = deduplicatePlants(merged);
-      savePlants(deduplicated);
-      callback(deduplicated);
+      const mergedWithInFlight = [...pendingInFlight, ...baseMerged];
+      const mergedAll = mergeMainPlantsWithPending(mergedWithInFlight);
+      callback(mergedAll);
     },
     (err) => {
       console.warn('Real-time Firestore sync encountered an issue, using local cache:', err);

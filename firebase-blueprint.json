@@ -96,7 +96,11 @@
   "firestore": {
     "/plants/{plantId}": {
       "schema": { "$ref": "#/entities/Plant" },
-      "description": "Kho dữ liệu cây thuốc thực địa; cộng đồng được tạo phiếu mới ở trạng thái pending, chỉ Admin được duyệt/sửa/xóa"
+      "description": "Kho dữ liệu cây thuốc chính thức trên bản đồ; chỉ Quản trị viên có quyền thêm/duyệt/sửa/xóa"
+    },
+    "/pending_surveys/{surveyId}": {
+      "schema": { "$ref": "#/entities/Plant" },
+      "description": "Hàng đợi phiếu khảo sát cây thuốc mới từ cộng đồng (trạng thái pending) chờ Ban Quản trị kiểm duyệt trước khi chuyển sang /plants"
     },
     "/surveys/{surveyId}": {
       "schema": { "$ref": "#/entities/SurveyReport" },

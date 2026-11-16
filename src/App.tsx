@@ -17,10 +17,13 @@ import {
   addPlantMonitoringLog,
   approvePlantMonitoringLog,
   rejectPlantMonitoringLog,
-  deletePlantMonitoringLog
+  deletePlantMonitoringLog,
+  setCloudPendingPlants,
+  clearCloudPendingPlants
 } from './utils/storage';
 import { 
   subscribeToPlantsRealtime, 
+  subscribeToPendingPlantsRealtime,
   syncInitialPlantsToFirestore,
   checkUserIsAdmin,
   subscribeToPendingSurveysRealtime,
@@ -35,7 +38,7 @@ import {
   sendEmailVerification,
   User
 } from 'firebase/auth';
-import { Lock, CheckCircle, X, ShieldAlert, Mail, Loader2 } from 'lucide-react';
+import { Lock, CheckCircle, AlertTriangle, X, ShieldAlert, Mail, Loader2 } from 'lucide-react';
 
 export function App() {
   const [plants, setPlants] = useState<MedicinalPlant[]>([]);
@@ -50,7 +53,7 @@ export function App() {
   const [adminLoginError, setAdminLoginError] = useState<string | null>(null);
   const [needsVerificationUser, setNeedsVerificationUser] = useState<User | null>(null);
   const [externalPendingSurveys, setExternalPendingSurveys] = useState<PendingCommunitySurvey[]>([]);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ text: string; variant: 'success' | 'error' } | null>(null);
 
   // Selected plant for detail modal
   const [selectedPlant, setSelectedPlant] = useState<MedicinalPlant | null>(null);
@@ -69,9 +72,17 @@ export function App() {
   const [isPickingCoords, setIsPickingCoords] = useState<boolean>(false);
   const [pickedCoords, setPickedCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+  const toastTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showToast = (msg: string, durationMs: number = 3500, variant: 'success' | 'error' = 'success') => {
+    setToastMessage({ text: msg, variant });
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = setTimeout(() => {
+      setToastMessage(null);
+      toastTimerRef.current = null;
+    }, durationMs);
   };
 
   // Load plants on mount, sync with cloud Firestore in real-time, and trigger auto backup check
@@ -137,9 +148,9 @@ export function App() {
     }
 
     const handleSyncError = (ev: Event) => {
-      const detail = (ev as CustomEvent<{ message?: string }>).detail;
+      const detail = (ev as CustomEvent<{ message?: string; isError?: boolean }>).detail;
       if (detail?.message) {
-        showToast(detail.message);
+        showToast(detail.message, 6000, detail.isError === false ? 'success' : 'error');
       }
     };
     if (typeof window !== 'undefined') {
@@ -155,16 +166,27 @@ export function App() {
     };
   }, []);
 
-  // Subscribe to pending community monitoring logs (/surveys) only when Admin is authenticated
+  // Subscribe to pending community new-plant surveys (/pending_surveys) and monitoring logs (/surveys) when Admin is authenticated
   useEffect(() => {
     if (!isAdmin) {
       setExternalPendingSurveys([]);
+      setPlants(clearCloudPendingPlants());
       return;
     }
+    const unsubscribePendingPlants = subscribeToPendingPlantsRealtime(
+      (pendingList) => {
+        const merged = setCloudPendingPlants(pendingList);
+        setPlants(merged);
+      },
+      (err) => {
+        console.warn('Real-time pending_surveys listener issue:', err);
+      }
+    );
     const unsubscribeSurveys = subscribeToPendingSurveysRealtime((surveys) => {
       setExternalPendingSurveys(surveys);
     });
     return () => {
+      unsubscribePendingPlants();
       unsubscribeSurveys();
     };
   }, [isAdmin]);
@@ -412,6 +434,7 @@ export function App() {
     }
     setIsAdmin(false);
     setAdminUser(null);
+    setPlants(clearCloudPendingPlants());
     setActiveTab('map');
     showToast('Đã đăng xuất quyền Quản trị.');
   };
@@ -422,9 +445,17 @@ export function App() {
     <div className="min-h-screen bg-stone-100 text-stone-900 flex flex-col font-sans selection:bg-emerald-200 selection:text-emerald-900">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-20 right-4 z-50 bg-stone-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border border-emerald-500/50 flex items-center gap-2.5 text-xs animate-fadeIn">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
+        <div
+          className={`fixed top-20 right-4 z-50 bg-stone-900/95 text-white px-4 py-3 rounded-2xl shadow-2xl border flex items-center gap-2.5 text-xs animate-fadeIn max-w-md ${
+            toastMessage.variant === 'error' ? 'border-rose-500/70' : 'border-emerald-500/50'
+          }`}
+        >
+          {toastMessage.variant === 'error' ? (
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+          ) : (
+            <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+          )}
+          <span>{toastMessage.text}</span>
         </div>
       )}
 
