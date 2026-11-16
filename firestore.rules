@@ -137,7 +137,7 @@ service cloud.firestore {
         && (!('plantName' in data) || (data.plantName is string && data.plantName.size() <= 200))
         && (!('plantScientificName' in data) || (data.plantScientificName is string && data.plantScientificName.size() <= 200))
         && data.date is string && data.date.size() <= 32
-        && data.status is string && data.status.size() <= 32 && data.status in ['present', 'disappeared', 'new']
+        && data.status is string && data.status.size() <= 32 && data.status in ['present', 'disappeared']
         && (!('conservationStatus' in data) || (data.conservationStatus is string && data.conservationStatus.size() <= 64))
         && data.statusNote is string && data.statusNote.size() > 0 && data.statusNote.size() <= 2000
         && data.surveyor is string && data.surveyor.size() > 0 && data.surveyor.size() <= 200

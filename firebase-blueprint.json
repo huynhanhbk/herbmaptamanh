@@ -59,7 +59,7 @@
         "plantName": { "type": "string", "maxLength": 200 },
         "plantScientificName": { "type": "string", "maxLength": 200 },
         "date": { "type": "string", "maxLength": 32 },
-        "status": { "type": "string", "enum": ["present", "disappeared", "new"] },
+        "status": { "type": "string", "enum": ["present", "disappeared"] },
         "conservationStatus": { "type": "string", "maxLength": 64 },
         "statusNote": { "type": "string", "maxLength": 2000 },
         "surveyor": { "type": "string", "maxLength": 200 },

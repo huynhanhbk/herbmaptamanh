@@ -784,12 +784,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ⚫ Báo cáo: Biến mất (Lưu trữ điểm đã mất)
                     </span>
                   );
-                } else if (log.status === 'new') {
-                  statusBadge = (
-                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
-                      🟣 Báo cáo: Điểm mới (Chờ duyệt)
-                    </span>
-                  );
                 }
 
                 return (

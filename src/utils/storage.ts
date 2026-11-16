@@ -18,6 +18,10 @@ import {
 import { INITIAL_PLANTS_DATA } from '../data/plants';
 import { 
   savePlantToFirestore, 
+  createSurveyPlantInFirestore,
+  sanitizePlantForFirestore,
+  markPendingPlantUpload,
+  clearPendingPlantUpload,
   deletePlantFromFirestore, 
   batchSavePlantsToFirestore,
   createPendingSurveyLogInFirestore,
@@ -116,34 +120,31 @@ function migratePlantRecord(p: any): MedicinalPlant {
 
   const conservationLevel: ConservationLevel = 'safe';
 
-  // Monitoring logs normalization & occurrence status derivation
+  // Monitoring logs normalization & occurrence status derivation (strictly 2 states: present | disappeared)
   let monitoringLogs = Array.isArray(p.monitoringLogs) ? [...p.monitoringLogs] : [];
   if (monitoringLogs.length === 0) {
     const initialDate = p.dataSource?.surveyDate || (p.createdAt ? p.createdAt.split('T')[0] : '2026-02-12');
+    const initLogStatus: 'present' | 'disappeared' = occurrenceStatus === 'disappeared' ? 'disappeared' : 'present';
+    const initLogCons: UnifiedConservationStatus = initLogStatus === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận';
     monitoringLogs = [
       {
         id: `log-init-${p.id || '1'}`,
         date: initialDate,
-        status: occurrenceStatus,
-        conservationStatus: conservationStatus,
-        statusNote: `Ghi nhận khảo sát ban đầu: Hiện trạng thực địa [${conservationStatus}].`,
+        status: initLogStatus,
+        conservationStatus: initLogCons,
+        statusNote: `Ghi nhận khảo sát ban đầu: Hiện trạng thực địa [${initLogCons}].`,
         surveyor: p.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
         createdAt: p.createdAt || new Date().toISOString(),
-        approvalStatus: 'approved',
-        submittedByRole: 'admin',
-        reviewedBy: p.dataSource?.verifiedBy || 'Ban Quản trị',
+        approvalStatus: p.status === 'pending' ? 'pending' : 'approved',
+        submittedByRole: p.status === 'pending' ? 'public' : 'admin',
+        reviewedBy: p.status === 'pending' ? undefined : (p.dataSource?.verifiedBy || 'Ban Quản trị'),
       }
     ];
   } else {
-    // Normalize legacy degraded/safe labels inside monitoring logs
+    // Normalize monitoring logs strictly to 2 states: present (Đã ghi nhận) | disappeared (Biến mất)
     monitoringLogs = monitoringLogs.map((log: any) => {
-      let normStatus: PlantOccurrenceStatus = log.status === 'disappeared' ? 'disappeared' : log.status === 'new' ? 'new' : 'present';
-      let normCons: UnifiedConservationStatus =
-        normStatus === 'disappeared'
-          ? 'Biến mất'
-          : normStatus === 'new'
-          ? 'Điểm mới (Chờ duyệt)'
-          : 'Đã ghi nhận';
+      const normStatus: PlantOccurrenceStatus = log.status === 'disappeared' ? 'disappeared' : 'present';
+      const normCons: UnifiedConservationStatus = normStatus === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận';
       return {
         ...log,
         status: normStatus,
@@ -160,23 +161,20 @@ function migratePlantRecord(p: any): MedicinalPlant {
   );
   const sortedApprovedLogs = [...approvedLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const latestApprovedLog = sortedApprovedLogs[0];
-  if (latestApprovedLog && p.status !== 'pending') {
-    occurrenceStatus = latestApprovedLog.status;
-    if (occurrenceStatus === 'disappeared') {
+  if (p.status === 'pending' && occurrenceStatus !== 'disappeared') {
+    occurrenceStatus = 'new';
+    conservationStatus = 'Điểm mới (Chờ duyệt)';
+    isDisappeared = false;
+  } else if (latestApprovedLog && p.status !== 'pending') {
+    if (latestApprovedLog.status === 'disappeared') {
+      occurrenceStatus = 'disappeared';
       conservationStatus = 'Biến mất';
       isDisappeared = true;
-    } else if (occurrenceStatus === 'new') {
-      conservationStatus = 'Điểm mới (Chờ duyệt)';
-      isDisappeared = false;
     } else {
       occurrenceStatus = 'present';
       conservationStatus = 'Đã ghi nhận';
       isDisappeared = false;
     }
-  } else if (p.status === 'pending' && occurrenceStatus !== 'disappeared') {
-    occurrenceStatus = 'new';
-    conservationStatus = 'Điểm mới (Chờ duyệt)';
-    isDisappeared = false;
   }
 
   const genus = getPlantGenus(p);
@@ -431,10 +429,14 @@ export function getNextLocationIdForSpecies(baseSpeciesId: string, currentPlants
   return candidate;
 }
 
-export function addPlant(
+function prepareSurveyPlantOperation(
   plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
   explicitSpeciesId?: string
-): MedicinalPlant {
+): {
+  mode: 'create' | 'update';
+  record: MedicinalPlant;
+  existingIndex: number;
+} {
   const currentPlants = getStoredPlants();
   const now = new Date().toISOString();
 
@@ -457,171 +459,220 @@ export function addPlant(
     });
   }
 
-  // Resolve requested status cleanly (3 states)
-  const resolvedConservationStatus = getConservationStatusLabel(
-    plant.conservationStatus,
-    plant.isDisappeared,
-    plant.occurrenceStatus
+  // Resolve point status cleanly: Admin => 'verified' (Đã ghi nhận), Guest => 'pending' (Điểm mới (Chờ duyệt))
+  const isVerifiedAdminSubmission = plant.status === 'verified';
+  const resolvedIsDisappeared = Boolean(
+    plant.isDisappeared || plant.occurrenceStatus === 'disappeared' || plant.conservationStatus === 'Biến mất'
   );
-  const resolvedOccurrenceStatus: PlantOccurrenceStatus =
-    plant.isDisappeared || plant.occurrenceStatus === 'disappeared' || resolvedConservationStatus === 'Biến mất'
-      ? 'disappeared'
-      : plant.occurrenceStatus === 'new' || resolvedConservationStatus === 'Điểm mới (Chờ duyệt)' || plant.status === 'pending'
-      ? 'new'
-      : 'present';
-  const resolvedIsDisappeared = resolvedOccurrenceStatus === 'disappeared';
-  const finalConservationStatus: UnifiedConservationStatus =
-    resolvedOccurrenceStatus === 'disappeared'
-      ? 'Biến mất'
-      : resolvedOccurrenceStatus === 'new'
-      ? 'Điểm mới (Chờ duyệt)'
-      : 'Đã ghi nhận';
+  const resolvedStatus: 'verified' | 'pending' = isVerifiedAdminSubmission ? 'verified' : 'pending';
+  const resolvedOccurrenceStatus: PlantOccurrenceStatus = resolvedIsDisappeared
+    ? 'disappeared'
+    : isVerifiedAdminSubmission
+    ? 'present'
+    : 'new';
+  const finalConservationStatus: UnifiedConservationStatus = resolvedIsDisappeared
+    ? 'Biến mất'
+    : isVerifiedAdminSubmission
+    ? 'Đã ghi nhận'
+    : 'Điểm mới (Chờ duyệt)';
 
-  // 2. CASE: Survey for an EXISTING species in the database
+  // Monitoring logs strictly carry ONLY 2 statuses: 'present' (Đã ghi nhận) or 'disappeared' (Biến mất)
+  const initLogStatus: 'present' | 'disappeared' = resolvedIsDisappeared ? 'disappeared' : 'present';
+  const initLogConservationStatus: UnifiedConservationStatus =
+    initLogStatus === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận';
+
+  // 2. CASE: Survey for an EXISTING species in the database -> Always create a new map survey point
   if (matchedBaseSpecies) {
-    const isNewLocation = isDifferentLocation(matchedBaseSpecies.location, plant.location);
-    const isPendingSubmission = plant.status === 'pending' || resolvedOccurrenceStatus === 'new';
+    const newPointId = getNextLocationIdForSpecies(matchedBaseSpecies.id, currentPlants);
+    const surveyApprovalStatus = isVerifiedAdminSubmission ? 'approved' : 'pending';
 
-    if (isNewLocation || isPendingSubmission) {
-      // Create a NEW survey location point on the map (strictly create-only in Firestore for pending surveys)
-      const newPointId = getNextLocationIdForSpecies(matchedBaseSpecies.id, currentPlants);
-      const surveyApprovalStatus = plant.status === 'pending' ? 'pending' : 'approved';
-
-      const newSurveyPoint: MedicinalPlant = {
-        ...matchedBaseSpecies,
-        ...plant,
-        id: newPointId,
-        vietnameseName: matchedBaseSpecies.vietnameseName || plant.vietnameseName,
-        scientificName: matchedBaseSpecies.scientificName || plant.scientificName,
-        family: plant.family || matchedBaseSpecies.family,
-        genus: plant.genus || matchedBaseSpecies.genus || getPlantGenus(matchedBaseSpecies),
-        location: plant.location || matchedBaseSpecies.location,
-        habitat: plant.habitat || matchedBaseSpecies.habitat,
-        habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
-        coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
-        photos: plant.photos && plant.photos.length > 0 ? plant.photos : matchedBaseSpecies.photos,
-        dataSource: plant.dataSource || {
-          type: 'field_survey_2026',
-          title: `Khảo sát điểm mới ${matchedBaseSpecies.vietnameseName}`,
-          surveyor: 'Đoàn khảo sát thực địa Tam Anh',
-          surveyDate: now.split('T')[0],
+    const rawSurveyPoint: MedicinalPlant = {
+      id: newPointId,
+      vietnameseName: matchedBaseSpecies.vietnameseName || plant.vietnameseName,
+      otherNames: plant.otherNames && plant.otherNames.length > 0 ? plant.otherNames : matchedBaseSpecies.otherNames,
+      scientificName: plant.scientificName || matchedBaseSpecies.scientificName,
+      family: plant.family || matchedBaseSpecies.family,
+      genus: plant.genus || matchedBaseSpecies.genus || getPlantGenus(matchedBaseSpecies),
+      species: plant.species || matchedBaseSpecies.species,
+      coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
+      photos: plant.photos && plant.photos.length > 0 ? plant.photos : matchedBaseSpecies.photos,
+      shortDescription: plant.shortDescription || matchedBaseSpecies.shortDescription,
+      identificationTraits: plant.identificationTraits || matchedBaseSpecies.identificationTraits,
+      habitat: plant.habitat || matchedBaseSpecies.habitat,
+      habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
+      location: plant.location || matchedBaseSpecies.location,
+      traditionalUses: plant.traditionalUses || matchedBaseSpecies.traditionalUses,
+      dataSource: {
+        type: plant.dataSource?.type || 'field_survey_2026',
+        title: plant.dataSource?.title || `Khảo sát điểm mới ${matchedBaseSpecies.vietnameseName}`,
+        surveyor: plant.dataSource?.surveyor || 'Đoàn khảo sát thực địa Tam Anh',
+        surveyDate: plant.dataSource?.surveyDate || now.split('T')[0],
+        ...(plant.dataSource?.surveyorPhone ? { surveyorPhone: plant.dataSource.surveyorPhone } : {}),
+        ...(plant.dataSource?.surveyorAddress ? { surveyorAddress: plant.dataSource.surveyorAddress } : {}),
+        ...(isVerifiedAdminSubmission
+          ? { verifiedBy: plant.dataSource?.verifiedBy || 'Ban Quản trị HerbMap Tam Anh' }
+          : {}),
+      },
+      status: resolvedStatus,
+      surveyFrequencyCount: 1,
+      occurrenceStatus: resolvedOccurrenceStatus,
+      conservationStatus: finalConservationStatus,
+      conservationLevel: 'safe',
+      isDisappeared: resolvedIsDisappeared,
+      monitoringLogs: [
+        {
+          id: `log-init-${newPointId}`,
+          date: plant.dataSource?.surveyDate || now.split('T')[0],
+          status: initLogStatus,
+          conservationStatus: initLogConservationStatus,
+          statusNote: isVerifiedAdminSubmission
+            ? `Ban Quản trị ghi nhận điểm khảo sát thực địa [${initLogConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`
+            : `Ghi nhận điểm khảo sát thực địa mới [${initLogConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'} (Phiếu đang chờ Ban Quản trị phê duyệt).`,
+          surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
+          ...(plant.dataSource?.surveyorPhone ? { contactPhone: plant.dataSource.surveyorPhone } : {}),
+          createdAt: now,
+          approvalStatus: surveyApprovalStatus,
+          submittedByRole: isVerifiedAdminSubmission ? 'admin' : 'public',
+          ...(isVerifiedAdminSubmission
+            ? { reviewedBy: 'Ban Quản trị (Admin)', reviewedAt: now }
+            : {}),
         },
-        status: plant.status || (resolvedOccurrenceStatus === 'new' ? 'pending' : 'verified'),
-        surveyFrequencyCount: 1,
-        occurrenceStatus: resolvedOccurrenceStatus,
-        conservationStatus: finalConservationStatus,
-        conservationLevel: 'safe',
-        isDisappeared: resolvedIsDisappeared,
-        monitoringLogs: [
-          {
-            id: `log-init-${newPointId}`,
-            date: plant.dataSource?.surveyDate || now.split('T')[0],
-            status: resolvedOccurrenceStatus,
-            conservationStatus: finalConservationStatus,
-            statusNote: `Ghi nhận điểm khảo sát thực địa [${finalConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
-            surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
-            createdAt: now,
-            approvalStatus: surveyApprovalStatus,
-            submittedByRole: surveyApprovalStatus === 'approved' ? 'admin' : 'public',
-          },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      };
+      ],
+      createdAt: now,
+      updatedAt: now,
+    };
 
-      const updatedList = deduplicatePlants([newSurveyPoint, ...currentPlants]);
-      savePlants(updatedList);
-      savePlantToFirestore(newSurveyPoint, true).catch((err) => {
-        console.error('Failed to sync new survey point to Firestore:', err);
-      });
-      return newSurveyPoint;
-    } else {
-      // Same exact location -> update/enrich existing record
-      const existingIndex = currentPlants.findIndex((p) => p.id === matchedBaseSpecies!.id);
-      const mergedPhotos = [...(matchedBaseSpecies.photos || [])];
-      (plant.photos || []).forEach((p) => {
-        if (!mergedPhotos.some((mp) => mp.url === p.url)) {
-          mergedPhotos.push(p);
-        }
-      });
-
-      const newLog: PlantMonitoringLog = {
-        id: `log-${Date.now()}`,
-        date: plant.dataSource?.surveyDate || now.split('T')[0],
-        status: resolvedOccurrenceStatus,
-        conservationStatus: finalConservationStatus,
-        statusNote: `Khảo sát bổ sung tại ${plant.location?.addressDescription || 'vị trí ban đầu'}: Hiện trạng [${finalConservationStatus}].`,
-        surveyor: plant.dataSource?.surveyor || 'Nhóm khảo sát thực địa Tam Anh',
-        createdAt: now,
-        approvalStatus: plant.status === 'pending' ? 'pending' : 'approved',
-        submittedByRole: plant.status === 'pending' ? 'public' : 'admin',
-      };
-
-      const existingLogs = Array.isArray(matchedBaseSpecies.monitoringLogs) ? matchedBaseSpecies.monitoringLogs : [];
-
-      const updatedExistingPlant: MedicinalPlant = {
-        ...matchedBaseSpecies,
-        ...plant,
-        id: matchedBaseSpecies.id,
-        genus: plant.genus || matchedBaseSpecies.genus || getPlantGenus(matchedBaseSpecies),
-        photos: mergedPhotos,
-        coverImage: plant.coverImage || matchedBaseSpecies.coverImage,
-        location: plant.location || matchedBaseSpecies.location,
-        habitat: plant.habitat || matchedBaseSpecies.habitat,
-        habitatCategory: plant.habitatCategory || matchedBaseSpecies.habitatCategory,
-        status: plant.status || matchedBaseSpecies.status,
-        occurrenceStatus: resolvedOccurrenceStatus,
-        conservationStatus: finalConservationStatus,
-        conservationLevel: 'safe',
-        isDisappeared: resolvedIsDisappeared,
-        surveyFrequencyCount: (matchedBaseSpecies.surveyFrequencyCount || 1) + 1,
-        monitoringLogs: [newLog, ...existingLogs],
-        updatedAt: now,
-      };
-
-      currentPlants[existingIndex] = updatedExistingPlant;
-      const updatedList = deduplicatePlants(currentPlants);
-      savePlants(updatedList);
-      savePlantToFirestore(updatedExistingPlant);
-      return updatedExistingPlant;
-    }
+    return {
+      mode: 'create',
+      record: sanitizePlantForFirestore(rawSurveyPoint),
+      existingIndex: -1,
+    };
   }
 
   // 3. CASE: Brand NEW species
   const newSpeciesId = getNextSpeciesId(currentPlants);
-  const newApprovalStatus = plant.status === 'pending' ? 'pending' : 'approved';
-  const newPlant: MedicinalPlant = {
+  const newApprovalStatus = isVerifiedAdminSubmission ? 'approved' : 'pending';
+  const rawNewPlant: MedicinalPlant = {
     ...plant,
     id: newSpeciesId,
     genus: plant.genus || getPlantGenus(plant),
+    status: resolvedStatus,
     surveyFrequencyCount: 1,
     occurrenceStatus: resolvedOccurrenceStatus,
     conservationStatus: finalConservationStatus,
     conservationLevel: 'safe',
     isDisappeared: resolvedIsDisappeared,
+    dataSource: {
+      ...plant.dataSource,
+      ...(isVerifiedAdminSubmission
+        ? { verifiedBy: plant.dataSource?.verifiedBy || 'Ban Quản trị HerbMap Tam Anh' }
+        : {}),
+    },
     monitoringLogs: [
       {
         id: `log-init-${newSpeciesId}`,
         date: plant.dataSource?.surveyDate || now.split('T')[0],
-        status: resolvedOccurrenceStatus,
-        conservationStatus: finalConservationStatus,
-        statusNote: `Khảo sát phát hiện loài cây thuốc [${finalConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`,
+        status: initLogStatus,
+        conservationStatus: initLogConservationStatus,
+        statusNote: isVerifiedAdminSubmission
+          ? `Ban Quản trị khảo sát phát hiện loài cây thuốc [${initLogConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'}.`
+          : `Khảo sát phát hiện loài cây thuốc mới [${initLogConservationStatus}] tại ${plant.location?.addressDescription || plant.location?.communeSection || 'xã Tam Anh'} (Phiếu đang chờ Ban Quản trị phê duyệt).`,
         surveyor: plant.dataSource?.surveyor || 'Nhóm nghiên cứu KHKT Tam Anh',
+        ...(plant.dataSource?.surveyorPhone ? { contactPhone: plant.dataSource.surveyorPhone } : {}),
         createdAt: now,
         approvalStatus: newApprovalStatus,
-        submittedByRole: newApprovalStatus === 'approved' ? 'admin' : 'public',
+        submittedByRole: isVerifiedAdminSubmission ? 'admin' : 'public',
+        ...(isVerifiedAdminSubmission
+          ? { reviewedBy: 'Ban Quản trị (Admin)', reviewedAt: now }
+          : {}),
       },
     ],
     createdAt: now,
     updatedAt: now,
   };
 
-  const updatedList = deduplicatePlants([newPlant, ...currentPlants]);
-  savePlants(updatedList);
-  savePlantToFirestore(newPlant, true).catch((err) => {
-    console.error('Failed to sync new plant to Firestore:', err);
-  });
-  return newPlant;
+  return {
+    mode: 'create',
+    record: sanitizePlantForFirestore(rawNewPlant),
+    existingIndex: -1,
+  };
+}
+
+export function addPlant(
+  plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
+  explicitSpeciesId?: string
+): MedicinalPlant {
+  const currentPlants = getStoredPlants();
+  const op = prepareSurveyPlantOperation(plant, explicitSpeciesId);
+
+  if (op.mode === 'create') {
+    markPendingPlantUpload(op.record);
+    const updatedList = deduplicatePlants([op.record, ...currentPlants]);
+    savePlants(updatedList);
+
+    createSurveyPlantInFirestore(op.record)
+      .then((savedPlant) => {
+        clearPendingPlantUpload(op.record.id);
+        if (savedPlant.id !== op.record.id) {
+          const latest = getStoredPlants().filter((p) => p.id !== op.record.id);
+          savePlants(deduplicatePlants([savedPlant, ...latest]));
+        }
+      })
+      .catch((err) => {
+        clearPendingPlantUpload(op.record.id);
+        console.error('Failed to sync new survey to Firestore:', err);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('herbmap-firestore-sync-error', {
+              detail: {
+                plantId: op.record.id,
+                message: 'Không thể đồng bộ phiếu khảo sát lên máy chủ Firestore. Vui lòng kiểm tra kết nối mạng hoặc liên hệ Ban Quản trị.',
+              },
+            })
+          );
+        }
+      });
+    return op.record;
+  } else {
+    currentPlants[op.existingIndex] = op.record;
+    const updatedList = deduplicatePlants(currentPlants);
+    savePlants(updatedList);
+    savePlantToFirestore(op.record).catch((err) => {
+      console.error('Failed to sync updated plant to Firestore:', err);
+    });
+    return op.record;
+  }
+}
+
+export async function saveNewPlantAsync(
+  plant: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string },
+  explicitSpeciesId?: string
+): Promise<{ plants: MedicinalPlant[]; savedPlant: MedicinalPlant }> {
+  const op = prepareSurveyPlantOperation(plant, explicitSpeciesId);
+
+  let savedPlant: MedicinalPlant;
+  if (op.mode === 'create') {
+    savedPlant = await createSurveyPlantInFirestore(op.record);
+    const freshPlants = getStoredPlants();
+    const updatedList = deduplicatePlants([savedPlant, ...freshPlants]);
+    savePlants(updatedList);
+  } else {
+    await savePlantToFirestore(op.record, false);
+    savedPlant = op.record;
+    const freshPlants = getStoredPlants();
+    const idx = freshPlants.findIndex((p) => p.id === savedPlant.id);
+    if (idx >= 0) {
+      freshPlants[idx] = savedPlant;
+    } else {
+      freshPlants.unshift(savedPlant);
+    }
+    savePlants(deduplicatePlants(freshPlants));
+  }
+
+  return {
+    plants: getStoredPlants(),
+    savedPlant,
+  };
 }
 
 export function saveNewPlant(
@@ -710,23 +761,10 @@ export function resolvePlantOccurrenceStatus(
 
   const latestApprovedLog = approvedLogs[0];
   const occurrenceStatus: PlantOccurrenceStatus =
-    latestApprovedLog.status === 'disappeared'
-      ? 'disappeared'
-      : latestApprovedLog.status === 'new'
-      ? 'new'
-      : 'present';
+    latestApprovedLog.status === 'disappeared' ? 'disappeared' : 'present';
   const isDisappeared = occurrenceStatus === 'disappeared';
-
-  let conservationStatus: UnifiedConservationStatus = 'Đã ghi nhận';
+  const conservationStatus: UnifiedConservationStatus = isDisappeared ? 'Biến mất' : 'Đã ghi nhận';
   const conservationLevel: ConservationLevel = 'safe';
-
-  if (isDisappeared) {
-    conservationStatus = 'Biến mất';
-  } else if (occurrenceStatus === 'new') {
-    conservationStatus = 'Điểm mới (Chờ duyệt)';
-  } else {
-    conservationStatus = 'Đã ghi nhận';
-  }
 
   return {
     occurrenceStatus,
@@ -737,28 +775,23 @@ export function resolvePlantOccurrenceStatus(
   };
 }
 
-export function addPlantMonitoringLog(
+export async function addPlantMonitoringLogAsync(
   plantId: string,
   logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>,
   isAdmin: boolean = false
-): MedicinalPlant[] {
+): Promise<MedicinalPlant[]> {
   const currentPlants = getStoredPlants();
   const index = currentPlants.findIndex((p) => p.id === plantId);
   if (index === -1) return currentPlants;
 
   const plant = currentPlants[index];
   const now = new Date().toISOString();
-  
-  const normLogStatus: PlantOccurrenceStatus =
-    logData.status === 'disappeared' ? 'disappeared' : logData.status === 'new' ? 'new' : 'present';
 
-  // Determine survey occurrence status for this log (3 states)
+  // Monitoring logs strictly allow ONLY 2 statuses: present (Đã ghi nhận) | disappeared (Biến mất)
+  const normLogStatus: 'present' | 'disappeared' =
+    logData.status === 'disappeared' ? 'disappeared' : 'present';
   const logConservationStatus: UnifiedConservationStatus =
-    normLogStatus === 'disappeared'
-      ? 'Biến mất'
-      : normLogStatus === 'new'
-      ? 'Điểm mới (Chờ duyệt)'
-      : 'Đã ghi nhận';
+    normLogStatus === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận';
 
   const newLog: PlantMonitoringLog = {
     id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -781,16 +814,94 @@ export function addPlantMonitoringLog(
 
   const resolved = resolvePlantOccurrenceStatus(
     updatedLogs,
-    plant.occurrenceStatus,
+    plant.status === 'verified'
+      ? (plant.isDisappeared || plant.occurrenceStatus === 'disappeared' ? 'disappeared' : 'present')
+      : plant.occurrenceStatus,
     plant.isDisappeared,
-    plant.conservationStatus
+    plant.status === 'verified' ? (plant.isDisappeared ? 'Biến mất' : 'Đã ghi nhận') : plant.conservationStatus
   );
 
   const updatedPlant: MedicinalPlant = {
     ...plant,
-    occurrenceStatus: resolved.occurrenceStatus,
+    occurrenceStatus: plant.status === 'pending' && !resolved.isDisappeared ? 'new' : resolved.occurrenceStatus,
     isDisappeared: resolved.isDisappeared,
-    conservationStatus: resolved.conservationStatus,
+    conservationStatus: plant.status === 'pending' && !resolved.isDisappeared ? 'Điểm mới (Chờ duyệt)' : resolved.conservationStatus,
+    conservationLevel: resolved.conservationLevel,
+    monitoringLogs: updatedLogs,
+    updatedAt: now,
+  };
+
+  if (isAdmin) {
+    await savePlantToFirestore(updatedPlant);
+  } else {
+    await createPendingSurveyLogInFirestore({
+      ...newLog,
+      plantId: plant.id,
+      plantName: plant.vietnameseName,
+      plantScientificName: plant.scientificName,
+    });
+  }
+
+  const latestList = getStoredPlants();
+  const latestIdx = latestList.findIndex((p) => p.id === plantId);
+  if (latestIdx >= 0) {
+    latestList[latestIdx] = updatedPlant;
+    savePlants(latestList);
+  }
+  return getStoredPlants();
+}
+
+export function addPlantMonitoringLog(
+  plantId: string,
+  logData: Omit<PlantMonitoringLog, 'id' | 'createdAt'>,
+  isAdmin: boolean = false
+): MedicinalPlant[] {
+  const currentPlants = getStoredPlants();
+  const index = currentPlants.findIndex((p) => p.id === plantId);
+  if (index === -1) return currentPlants;
+
+  const plant = currentPlants[index];
+  const now = new Date().toISOString();
+  
+  // Monitoring logs strictly allow ONLY 2 statuses: present (Đã ghi nhận) | disappeared (Biến mất)
+  const normLogStatus: 'present' | 'disappeared' =
+    logData.status === 'disappeared' ? 'disappeared' : 'present';
+  const logConservationStatus: UnifiedConservationStatus =
+    normLogStatus === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận';
+
+  const newLog: PlantMonitoringLog = {
+    id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    date: logData.date,
+    status: normLogStatus,
+    conservationStatus: logConservationStatus,
+    statusNote: logData.statusNote,
+    surveyor: logData.surveyor,
+    contactPhone: logData.contactPhone,
+    evidencePhoto: logData.evidencePhoto,
+    createdAt: now,
+    approvalStatus: isAdmin ? 'approved' : 'pending',
+    submittedByRole: isAdmin ? 'admin' : 'public',
+    reviewedBy: isAdmin ? 'Ban Quản trị (Admin)' : undefined,
+    reviewedAt: isAdmin ? now : undefined,
+  };
+
+  const existingLogs = Array.isArray(plant.monitoringLogs) ? [...plant.monitoringLogs] : [];
+  const updatedLogs = [newLog, ...existingLogs];
+
+  const resolved = resolvePlantOccurrenceStatus(
+    updatedLogs,
+    plant.status === 'verified'
+      ? (plant.isDisappeared || plant.occurrenceStatus === 'disappeared' ? 'disappeared' : 'present')
+      : plant.occurrenceStatus,
+    plant.isDisappeared,
+    plant.status === 'verified' ? (plant.isDisappeared ? 'Biến mất' : 'Đã ghi nhận') : plant.conservationStatus
+  );
+
+  const updatedPlant: MedicinalPlant = {
+    ...plant,
+    occurrenceStatus: plant.status === 'pending' && !resolved.isDisappeared ? 'new' : resolved.occurrenceStatus,
+    isDisappeared: resolved.isDisappeared,
+    conservationStatus: plant.status === 'pending' && !resolved.isDisappeared ? 'Điểm mới (Chờ duyệt)' : resolved.conservationStatus,
     conservationLevel: resolved.conservationLevel,
     monitoringLogs: updatedLogs,
     updatedAt: now,
@@ -812,6 +923,16 @@ export function addPlantMonitoringLog(
       plantScientificName: plant.scientificName,
     }).catch((err) => {
       console.error('Failed to submit pending monitoring survey to Firestore:', err);
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('herbmap-firestore-sync-error', {
+            detail: {
+              plantId: plant.id,
+              message: 'Không thể gửi báo cáo biến động thực địa lên máy chủ. Vui lòng kiểm tra kết nối mạng.',
+            },
+          })
+        );
+      }
     });
   }
   return getStoredPlants();
@@ -1018,6 +1139,10 @@ export function getAllPendingMonitoringLogs(
 
   plants.forEach((plant) => {
     (plant.monitoringLogs || []).forEach((log) => {
+      // Do not duplicate initial point-creation logs for pending new survey points (those are approved in Tab 1)
+      if (plant.status === 'pending' && log.id && log.id.startsWith('log-init-')) {
+        return;
+      }
       if (log.approvalStatus === 'pending') {
         seenLogIds.add(log.id);
         list.push({
@@ -1025,7 +1150,11 @@ export function getAllPendingMonitoringLogs(
           plantName: plant.vietnameseName,
           plantScientificName: plant.scientificName,
           plant,
-          log,
+          log: {
+            ...log,
+            status: log.status === 'disappeared' ? 'disappeared' : 'present',
+            conservationStatus: log.status === 'disappeared' ? 'Biến mất' : 'Đã ghi nhận',
+          },
         });
       }
     });
@@ -1119,14 +1248,27 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
     ? [...updates.monitoringLogs] 
     : (Array.isArray(current.monitoringLogs) ? [...current.monitoringLogs] : []);
 
-  // Check if status changed by admin edit to record an approved log entry if appropriate
+  if (updates.status === 'verified' && current.status === 'pending') {
+    monitoringLogs = monitoringLogs.map((log) =>
+      log.id === `log-init-${current.id}`
+        ? {
+            ...log,
+            status: log.status === 'disappeared' ? ('disappeared' as const) : ('present' as const),
+            conservationStatus: log.status === 'disappeared' ? ('Biến mất' as const) : ('Đã ghi nhận' as const),
+            approvalStatus: 'approved' as const,
+            reviewedBy: 'Ban Quản trị (Admin)',
+            reviewedAt: now,
+          }
+        : log
+    );
+  }
+
+  // Record an approved monitoring log ONLY for the 2 monitoring states: 'present' (Đã ghi nhận) or 'disappeared' (Biến mất)
   const statusChanged = reqConservationStatus !== current.conservationStatus || occurrenceStatus !== current.occurrenceStatus;
 
-  if (statusChanged) {
+  if (statusChanged && (occurrenceStatus === 'present' || occurrenceStatus === 'disappeared')) {
     const statusNote = reqConservationStatus === 'Biến mất'
       ? 'Quản trị viên cập nhật: Điểm cây thuốc đã biến mất tại vị trí khảo sát.'
-      : reqConservationStatus === 'Điểm mới (Chờ duyệt)'
-      ? 'Quản trị viên cập nhật: Điểm phát hiện mới ngoài thực địa (chờ duyệt).'
       : 'Quản trị viên xác nhận: Điểm cây thuốc đã ghi nhận ổn định ngoài thực địa.';
 
     const adminLog: PlantMonitoringLog = {

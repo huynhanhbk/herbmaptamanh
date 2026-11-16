@@ -454,7 +454,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         const file = filesToProcess[i];
         let url = '';
         try {
-          url = await compressImageFile(file, 900, 900, 0.72);
+          url = await compressImageFile(file, 800, 800, 0.68);
         } catch {
           url = await new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -533,6 +533,11 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       return;
     }
 
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+      setValidationError('Tọa độ GPS (Vĩ độ / Kinh độ) không hợp lệ. Vui lòng kiểm tra hoặc chọn lại trên bản đồ.');
+      return;
+    }
+
     if (!surveyor.trim()) {
       setValidationError('Vui lòng nhập Họ tên người khảo sát / Nhóm nghiên cứu.');
       return;
@@ -606,7 +611,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       (basePlant ? getPlantGenus(basePlant) : getPlantGenus({ scientificName: resolvedScientificName }));
     const resolvedSpecies = speciesName.trim() || basePlant?.species || '';
 
-    // Default status for every new survey is ALWAYS "Điểm mới (Chờ duyệt)" until Admin approves
+    // Admin adding a new point => immediately "Đã ghi nhận" ('verified' / 'present');
+    // Guest/community adding a new point => "Điểm mới (Chờ duyệt)" ('pending' / 'new')
     const newRecord: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string } = {
       id: explicitId,
       vietnameseName: basePlant ? basePlant.vietnameseName : parsedVietnameseName,
@@ -633,9 +639,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         addressDescription: addressDescription.trim() || `${communeSection}, xã Tam Anh`,
         communeSection: communeSection,
       },
-      conservationStatus: 'Điểm mới (Chờ duyệt)',
+      conservationStatus: isAdmin ? 'Đã ghi nhận' : 'Điểm mới (Chờ duyệt)',
       conservationLevel: 'safe',
-      occurrenceStatus: 'new',
+      occurrenceStatus: isAdmin ? 'present' : 'new',
       isDisappeared: false,
       traditionalUses: {
         folkRemedies: remediesArray.length > 0 ? remediesArray : (basePlant?.traditionalUses.folkRemedies || ['Tư liệu dân gian đang được thẩm định thêm.']),
@@ -652,8 +658,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         surveyorAddress: surveyorAddress.trim() || undefined,
         surveyorPhone: surveyorPhone.trim(),
         surveyDate: new Date().toISOString().split('T')[0],
+        ...(isAdmin ? { verifiedBy: 'Ban Quản trị HerbMap Tam Anh' } : {}),
       },
-      status: 'pending',
+      status: isAdmin ? 'verified' : 'pending',
     };
 
     onSaveNewPlant(newRecord, explicitId);
@@ -694,7 +701,15 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
               <span>
-                <b>Quy trình số hóa thực địa:</b> Phiếu khảo sát mới mặc định ở trạng thái <b>"Điểm mới (Chờ duyệt)"</b>. Sau khi Quản trị viên xác nhận thông tin chính xác và duyệt phiếu, trạng thái cây sẽ chuyển sang <b>"Đã ghi nhận"</b>.
+                {isAdmin ? (
+                  <>
+                    <b>Quy trình số hóa thực địa (Ban Quản trị):</b> Bạn đang đăng nhập với quyền <b>Quản trị viên</b> — điểm khảo sát mới sẽ được ghi nhận trực tiếp ở trạng thái <b>"Đã ghi nhận"</b> mà không cần chờ duyệt.
+                  </>
+                ) : (
+                  <>
+                    <b>Quy trình số hóa thực địa:</b> Phiếu khảo sát mới mặc định ở trạng thái <b>"Điểm mới (Chờ duyệt)"</b>. Sau khi Quản trị viên xác nhận thông tin chính xác và duyệt phiếu, trạng thái cây sẽ chuyển sang <b>"Đã ghi nhận"</b>.
+                  </>
+                )}
               </span>
             </div>
           </div>
@@ -1601,7 +1616,8 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
 
               <button
                 type="submit"
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold shadow-md shadow-emerald-950/20 flex items-center gap-1.5 transition-all hover:scale-[1.01]"
+                disabled={isCompressingPhotos}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold shadow-md shadow-emerald-950/20 flex items-center gap-1.5 transition-all hover:scale-[1.01]"
               >
                 <Check className="w-4 h-4" />
                 <span>Lưu phiếu khảo sát thực địa</span>

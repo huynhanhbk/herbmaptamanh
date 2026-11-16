@@ -827,10 +827,6 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                       dotColor = 'bg-stone-600 ring-stone-200';
                       badgeBg = 'bg-stone-100 text-stone-800 border-stone-300';
                       statusTitle = '⚫ Biến mất khỏi thực địa';
-                    } else if (log.status === 'new') {
-                      dotColor = 'bg-purple-500 ring-purple-200';
-                      badgeBg = 'bg-purple-100 text-purple-800 border-purple-200';
-                      statusTitle = '🟣 Điểm mới (Chờ duyệt)';
                     }
 
                     if (isPending) {

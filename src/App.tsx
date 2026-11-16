@@ -136,9 +136,22 @@ export function App() {
       }
     }
 
+    const handleSyncError = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ message?: string }>).detail;
+      if (detail?.message) {
+        showToast(detail.message);
+      }
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('herbmap-firestore-sync-error', handleSyncError);
+    }
+
     return () => {
       unsubscribePlants();
       unsubscribeAuth();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('herbmap-firestore-sync-error', handleSyncError);
+      }
     };
   }, []);
 
@@ -195,10 +208,15 @@ export function App() {
     setSurveyPrefillData(null);
     setPickedCoords(null);
     setIsPickingCoords(false);
+    const isDirectVerified = newPlantData.status === 'verified';
     showToast(
-      explicitSpeciesId 
-        ? `Đã ghi nhận điểm khảo sát thực địa mới cho loài [${newPlantData.vietnameseName}] trên Bản đồ số!` 
-        : 'Đã lưu phiếu khảo sát thực địa thành công vào cơ sở dữ liệu số!'
+      isDirectVerified
+        ? explicitSpeciesId
+          ? `Ban Quản trị: Đã ghi nhận điểm khảo sát mới cho loài [${newPlantData.vietnameseName}] ở trạng thái Đã ghi nhận!`
+          : 'Ban Quản trị: Đã lưu điểm khảo sát thực địa mới ở trạng thái Đã ghi nhận!'
+        : explicitSpeciesId
+        ? `Đã ghi nhận điểm khảo sát thực địa mới cho loài [${newPlantData.vietnameseName}] ở trạng thái Điểm mới (Chờ duyệt)!`
+        : 'Đã lưu phiếu khảo sát thực địa thành công ở trạng thái Điểm mới (Chờ duyệt)!'
     );
   };
 

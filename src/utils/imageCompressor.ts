@@ -56,14 +56,15 @@ export async function compressBase64Image(
   dataUrl: string,
   maxWidth = 1200,
   maxHeight = 1200,
-  quality = 0.78
+  quality = 0.78,
+  force = false
 ): Promise<string> {
   if (!dataUrl || !dataUrl.startsWith('data:image')) {
     return dataUrl;
   }
 
-  // If already small (< 150KB), no need to compress
-  if (dataUrl.length < 200000) {
+  // If already small (< 150KB) and not forced, no need to compress
+  if (!force && dataUrl.length < 200000) {
     return dataUrl;
   }
 
