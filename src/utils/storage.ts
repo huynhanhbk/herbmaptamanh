@@ -968,8 +968,10 @@ export function getAllPendingMonitoringLogs(
   const list: PendingMonitoringLogItem[] = [];
 
   plants.forEach((plant) => {
+    if (plant.status !== 'verified') return;
+
     (plant.monitoringLogs || []).forEach((log) => {
-      if (log.approvalStatus === 'pending') {
+      if (log.approvalStatus === 'pending' && !String(log.id || '').startsWith('log-init-')) {
         list.push({
           plantId: plant.id,
           plantName: plant.vietnameseName,

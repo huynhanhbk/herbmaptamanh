@@ -32,7 +32,11 @@ import {
   getPlantSpecies
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
-import { compressImageFile } from '../utils/imageCompressor';
+import { compressImageFile, compressBase64Image } from '../utils/imageCompressor';
+
+const DEFAULT_COVER_IMAGE =
+  'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
+const MAX_SURVEY_PHOTOS = 5;
 
 interface SurveyEntryModalProps {
   isOpen: boolean;
@@ -71,9 +75,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
   const [family, setFamily] = useState('');
   const [genus, setGenus] = useState('');
   const [species, setSpecies] = useState('');
-  const [coverImage, setCoverImage] = useState<string>(
-    'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'
-  );
+  const [coverImage, setCoverImage] = useState<string>(DEFAULT_COVER_IMAGE);
+  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
+  const [activePreviewPhotoIndex, setActivePreviewPhotoIndex] = useState<number>(0);
+  const [photoUploadNotice, setPhotoUploadNotice] = useState<string | null>(null);
   const [shortDescription, setShortDescription] = useState('');
   
   // Botanical traits (4 Unified Fields)
@@ -136,6 +141,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setGenus(getPlantGenus(plant));
     setSpecies(getPlantSpecies(plant));
     setCoverImage(plant.coverImage);
+    setUploadedPhotos([]);
+    setActivePreviewPhotoIndex(0);
+    setPhotoUploadNotice(null);
     setShortDescription(plant.shortDescription);
     setGrowthForm(plant.identificationTraits?.growthForm || '');
     setLeavesTrait(plant.identificationTraits?.leaves || '');
@@ -184,7 +192,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       setFamily('');
       setGenus('');
       setSpecies('');
-      setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
+      setCoverImage(DEFAULT_COVER_IMAGE);
+      setUploadedPhotos([]);
+      setActivePreviewPhotoIndex(0);
+      setPhotoUploadNotice(null);
       setShortDescription('');
       setGrowthForm('');
       setLeavesTrait('');
@@ -229,6 +240,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         applyExistingPlant(matched);
         if (prefillData.imageBase64) {
           setCoverImage(prefillData.imageBase64);
+          setUploadedPhotos([prefillData.imageBase64]);
+          setActivePreviewPhotoIndex(0);
+        } else {
+          setUploadedPhotos([]);
         }
       } else {
         setEntryMode('new_species');
@@ -243,6 +258,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
         setSpecies(getPlantSpecies({ scientificName: aiSci }));
         if (prefillData.imageBase64) {
           setCoverImage(prefillData.imageBase64);
+          setUploadedPhotos([prefillData.imageBase64]);
+          setActivePreviewPhotoIndex(0);
+        } else {
+          setUploadedPhotos([]);
         }
         setShortDescription(prefillData.candidate.observedFeatures?.join(', ') || '');
         setGrowthForm('');
@@ -350,7 +369,10 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setFamily('');
     setGenus('');
     setSpecies('');
-    setCoverImage('https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80');
+    setCoverImage(DEFAULT_COVER_IMAGE);
+    setUploadedPhotos([]);
+    setActivePreviewPhotoIndex(0);
+    setPhotoUploadNotice(null);
     setShortDescription('');
     setGrowthForm('');
     setLeavesTrait('');
@@ -362,20 +384,67 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     setValidationError(null);
   };
 
-  // Handle Photo upload with automatic compression
+  // Handle Photo upload with automatic compression (supports up to 5 photos)
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files: File[] = e.target.files ? Array.from<File>(e.target.files) : [];
+    e.target.value = '';
+    if (files.length === 0) return;
 
-    try {
-      const compressed = await compressImageFile(file, 1200, 1200, 0.78);
-      setCoverImage(compressed);
-    } catch {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setCoverImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    setPhotoUploadNotice(null);
+    const remainingSlots = MAX_SURVEY_PHOTOS - uploadedPhotos.length;
+    if (remainingSlots <= 0) {
+      setPhotoUploadNotice(`Đã đạt tối đa ${MAX_SURVEY_PHOTOS} ảnh thực địa cho mỗi phiếu.`);
+      return;
+    }
+
+    const selectedFiles = files.slice(0, remainingSlots);
+    if (files.length > remainingSlots) {
+      setPhotoUploadNotice(
+        `Chỉ thêm ${remainingSlots} ảnh (tối đa ${MAX_SURVEY_PHOTOS} ảnh cho mỗi phiếu khảo sát).`
+      );
+    }
+
+    const processedImages: string[] = [];
+    for (const file of selectedFiles) {
+      try {
+        let compressed = await compressImageFile(file, 900, 900, 0.68);
+        if (compressed.length > 140000) {
+          compressed = await compressBase64Image(compressed, 720, 720, 0.55, true);
+        }
+        processedImages.push(compressed);
+      } catch {
+        const fallbackDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string) || '');
+          reader.onerror = () => resolve('');
+          reader.readAsDataURL(file);
+        });
+        if (fallbackDataUrl) processedImages.push(fallbackDataUrl);
+      }
+    }
+
+    if (processedImages.length > 0) {
+      const nextPhotos = [...uploadedPhotos, ...processedImages].slice(0, MAX_SURVEY_PHOTOS);
+      setUploadedPhotos(nextPhotos);
+      setCoverImage(nextPhotos[0]);
+      setActivePreviewPhotoIndex(nextPhotos.length - 1);
+    }
+  };
+
+  const handleRemoveUploadedPhoto = (indexToRemove: number) => {
+    const nextPhotos = uploadedPhotos.filter((_, idx) => idx !== indexToRemove);
+    setUploadedPhotos(nextPhotos);
+    setPhotoUploadNotice(null);
+    if (nextPhotos.length > 0) {
+      setCoverImage(nextPhotos[0]);
+      setActivePreviewPhotoIndex((prev) => Math.min(prev, nextPhotos.length - 1));
+    } else {
+      const fallbackImg =
+        entryMode === 'existing_species' && selectedExistingPlant
+          ? selectedExistingPlant.coverImage
+          : DEFAULT_COVER_IMAGE;
+      setCoverImage(fallbackImg);
+      setActivePreviewPhotoIndex(0);
     }
   };
 
@@ -436,6 +505,12 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     const basePlant = entryMode === 'existing_species' && selectedExistingPlant ? selectedExistingPlant : null;
     const displayLocation = addressDescription.trim() || communeSection;
 
+    const effectivePhotoUrls =
+      uploadedPhotos.length > 0
+        ? uploadedPhotos
+        : [coverImage || (basePlant ? basePlant.coverImage : DEFAULT_COVER_IMAGE)];
+    const finalCoverImage = effectivePhotoUrls[0] || DEFAULT_COVER_IMAGE;
+
     const newRecord: Omit<MedicinalPlant, 'id' | 'createdAt' | 'updatedAt' | 'surveyFrequencyCount'> & { id?: string } = {
       id: explicitId,
       vietnameseName: basePlant ? basePlant.vietnameseName : parsedPrimaryName,
@@ -444,15 +519,13 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
       family: family.trim() || (basePlant ? basePlant.family : 'Chưa xác định'),
       genus: genus.trim() || (basePlant ? getPlantGenus(basePlant) : undefined),
       species: species.trim() || (basePlant ? getPlantSpecies(basePlant) : undefined),
-      coverImage: coverImage || (basePlant ? basePlant.coverImage : 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'),
-      photos: [
-        {
-          id: `photo-${Date.now()}`,
-          url: coverImage,
-          caption: `Mẫu thực địa ${parsedPrimaryName} tại ${displayLocation}`,
-          type: 'whole',
-        },
-      ],
+      coverImage: finalCoverImage,
+      photos: effectivePhotoUrls.map((photoUrl, idx) => ({
+        id: `photo-${Date.now()}-${idx}`,
+        url: photoUrl,
+        caption: `Mẫu thực địa ${parsedPrimaryName} tại ${displayLocation}${effectivePhotoUrls.length > 1 ? ` (Ảnh ${idx + 1})` : ''}`,
+        type: 'whole',
+      })),
       shortDescription: shortDescription.trim() || (basePlant ? basePlant.shortDescription : `Cây thuốc ghi nhận tại ${displayLocation}, xã Tam Anh.`),
       identificationTraits: {
         growthForm: growthForm.trim() || basePlant?.identificationTraits?.growthForm || 'Cây thảo / cây bụi tự nhiên.',
@@ -887,34 +960,108 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
               </div>
             )}
 
-            {/* Photo preview & upload for the survey point */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center pt-2">
-              <div className="sm:col-span-4 aspect-4/3 rounded-2xl overflow-hidden bg-stone-100 border border-stone-200">
-                <img src={coverImage} alt="Ảnh cây thuốc" className="w-full h-full object-cover" />
+            {/* Photo preview & upload for the survey point (up to 5 photos) */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-start pt-2">
+              <div className="sm:col-span-4 space-y-2">
+                <div className="aspect-4/3 rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 relative">
+                  <img
+                    src={
+                      uploadedPhotos.length > 0
+                        ? uploadedPhotos[activePreviewPhotoIndex] || uploadedPhotos[0]
+                        : coverImage
+                    }
+                    alt="Ảnh cây thuốc"
+                    className="w-full h-full object-cover"
+                  />
+                  {uploadedPhotos.length > 0 && (
+                    <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-stone-900/80 text-white text-[10px] font-bold">
+                      {activePreviewPhotoIndex + 1}/{uploadedPhotos.length}
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div className="sm:col-span-8 space-y-2">
-                <label className="block font-semibold text-stone-700">
-                  Ảnh chụp thực địa tại điểm khảo sát này (Lá, thân, hoa hoặc quả):
-                </label>
-                <div className="flex items-center gap-2">
-                  <label className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <label className="block font-semibold text-stone-700">
+                    Ảnh chụp thực địa tại điểm khảo sát này (Lá, thân, hoa hoặc quả):
+                  </label>
+                  <span className="text-[11px] font-semibold text-emerald-700">
+                    Đã chọn {uploadedPhotos.length}/{MAX_SURVEY_PHOTOS} ảnh
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <label
+                    className={`px-3 py-2 rounded-xl font-semibold flex items-center gap-1.5 transition-colors shadow-2xs ${
+                      uploadedPhotos.length >= MAX_SURVEY_PHOTOS
+                        ? 'bg-stone-300 text-stone-500 cursor-not-allowed'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                    }`}
+                  >
                     <Camera className="w-4 h-4" />
-                    <span>Chụp / Tải ảnh lên</span>
+                    <span>
+                      {uploadedPhotos.length >= MAX_SURVEY_PHOTOS
+                        ? `Đã đủ ${MAX_SURVEY_PHOTOS} ảnh`
+                        : uploadedPhotos.length > 0
+                        ? `Thêm ảnh (${uploadedPhotos.length}/${MAX_SURVEY_PHOTOS})`
+                        : 'Chụp / Tải ảnh lên (Tối đa 5 ảnh)'}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
+                      disabled={uploadedPhotos.length >= MAX_SURVEY_PHOTOS}
                       onChange={handlePhotoUpload}
                       className="hidden"
                     />
                   </label>
                   <span className="text-[11px] text-stone-500">Hoặc dán link ảnh:</span>
                 </div>
+
+                {photoUploadNotice && (
+                  <p className="text-[11px] text-amber-700 font-medium">{photoUploadNotice}</p>
+                )}
+
+                {uploadedPhotos.length > 0 && (
+                  <div className="grid grid-cols-5 gap-2 pt-1">
+                    {uploadedPhotos.map((photoUrl, idx) => (
+                      <div
+                        key={`survey-photo-${idx}`}
+                        onClick={() => setActivePreviewPhotoIndex(idx)}
+                        className={`relative aspect-square rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${
+                          activePreviewPhotoIndex === idx
+                            ? 'border-emerald-600 ring-2 ring-emerald-500/30'
+                            : 'border-stone-200 opacity-85 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={photoUrl} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveUploadedPhoto(idx);
+                          }}
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-stone-950/75 hover:bg-rose-600 text-white flex items-center justify-center transition-colors"
+                          title="Xóa ảnh này"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <input
                   type="text"
-                  value={coverImage.startsWith('data:') ? 'Ảnh đính kèm từ thiết bị' : coverImage}
+                  value={
+                    uploadedPhotos.length > 0
+                      ? `Đã đính kèm ${uploadedPhotos.length} ảnh từ thiết bị`
+                      : coverImage.startsWith('data:')
+                      ? 'Ảnh đính kèm từ thiết bị'
+                      : coverImage
+                  }
                   onChange={(e) => setCoverImage(e.target.value)}
-                  disabled={coverImage.startsWith('data:')}
+                  disabled={uploadedPhotos.length > 0 || coverImage.startsWith('data:')}
                   placeholder="https://..."
                   className="w-full p-2 rounded-xl border border-stone-300 text-[11px] bg-stone-50 text-stone-600"
                 />
