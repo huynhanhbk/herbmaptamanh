@@ -9,9 +9,7 @@ import {
   YAxis, 
   Tooltip, 
   ResponsiveContainer, 
-  Legend,
-  AreaChart,
-  Area
+  Legend
 } from 'recharts';
 import { 
   MedicinalPlant, 
@@ -88,14 +86,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     { name: 'Điểm mới (Chờ duyệt)', count: newPointsCount, color: '#a855f7' },
   ];
 
-  // Survey frequency by timeline (Months in 2026)
-  const timelineData = [
-    { month: 'T10/25', count: 4, label: 'Kế thừa' },
-    { month: 'T11/25', count: 7, label: 'Tài liệu' },
-    { month: 'T12/25', count: 10, label: 'Khảo sát sơ bộ' },
-    { month: 'T01/26', count: 18, label: 'Thực địa đợt 1' },
-    { month: 'T02/26', count: totalPlants + 6, label: 'Số hóa & QR' },
-  ];
+  // Medicinal Plant Name Statistics Data
+  const plantNameMap = new Map<string, { fullName: string; scientificName: string; count: number }>();
+  plants.forEach((p) => {
+    const rawName = (p.vietnameseName || 'Chưa đặt tên').trim();
+    const key = rawName.toLowerCase();
+    const existing = plantNameMap.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      plantNameMap.set(key, {
+        fullName: rawName,
+        scientificName: p.scientificName || '',
+        count: 1,
+      });
+    }
+  });
+
+  const plantNameChartData = Array.from(plantNameMap.values())
+    .sort((a, b) => b.count - a.count || a.fullName.localeCompare(b.fullName, 'vi'))
+    .map((item) => ({
+      ...item,
+      name: item.fullName.length > 18 ? `${item.fullName.slice(0, 17)}…` : item.fullName,
+    }));
 
   // Village Distribution Data (15 villages)
   const villageData = COMMUNE_VILLAGES.map((village) => {
@@ -307,32 +320,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
 
-        {/* Timeline Area Chart (12 cols) */}
+        {/* Medicinal Plant Name Statistics Chart (12 cols) */}
         <div className="lg:col-span-12 bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-bold text-sm text-stone-900">Tần Suất Ghi Nhận & Khảo Sát Không Gian</h3>
-              <p className="text-xs text-stone-500">Tiến độ phát hiện, số hóa và gắn mã QR thực địa theo các giai đoạn dự án</p>
+              <h3 className="font-bold text-sm text-stone-900">Thống Kê Theo Tên Cây Thuốc</h3>
+              <p className="text-xs text-stone-500">Số lượng điểm khảo sát ghi nhận theo từng loài cây thuốc tại xã Tam Anh</p>
             </div>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800">
-              Đợt 1 / 2026 Hoàn tất
+              {plantNameChartData.length} loài cây thuốc
             </span>
           </div>
 
-          <div className="h-48 w-full">
+          <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={timelineData} margin={{ top: 10, right: 20, left: -10, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#059669" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#059669" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <BarChart data={plantNameChartData} margin={{ top: 10, right: 20, left: -10, bottom: 55 }}>
+                <XAxis 
+                  dataKey="name" 
+                  tick={{ fontSize: 10 }} 
+                  interval={0} 
+                  angle={-35}
+                  textAnchor="end"
+                />
                 <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                <Tooltip contentStyle={{ borderRadius: '0.75rem', fontSize: '12px' }} />
-                <Area type="monotone" dataKey="count" stroke="#059669" strokeWidth={2} fillOpacity={1} fill="url(#colorCount)" name="Số điểm dữ liệu" />
-              </AreaChart>
+                <Tooltip 
+                  formatter={(value: any, _name: any, item: any) => [
+                    `${value} điểm khảo sát`,
+                    item.payload.fullName,
+                  ]}
+                  contentStyle={{ borderRadius: '0.75rem', fontSize: '12px' }}
+                />
+                <Bar dataKey="count" fill="#059669" radius={[6, 6, 0, 0]} name="Số điểm khảo sát" />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
