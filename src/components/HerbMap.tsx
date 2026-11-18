@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
+import 'leaflet.markercluster';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
@@ -54,7 +57,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersGroupRef = useRef<L.LayerGroup | null>(null);
+  const markersGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
   // Filters inside map view - Unified 5 status filters
@@ -132,8 +135,8 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     }
   };
 
-  // Default Tam Anh Center Coordinates (Núi Thành, Quảng Nam)
-  const TAM_ANH_CENTER = [15.4625, 108.6180] as [number, number];
+  // Default Tam Anh Center Coordinates (xã Tam Anh, TP. Đà Nẵng)
+  const TAM_ANH_CENTER = [15.4848, 108.5840] as [number, number];
 
   // Initialize Map
   useEffect(() => {
@@ -157,7 +160,35 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     osmLayer.addTo(map);
 
-    const markersGroup = L.layerGroup().addTo(map);
+    const markersGroup = L.markerClusterGroup({
+      maxClusterRadius: 50,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      iconCreateFunction: (cluster) => {
+        const count = cluster.getChildCount();
+        let sizeClass = 'w-10 h-10 text-xs';
+        let bgClass = 'bg-emerald-600/95 ring-emerald-400/40';
+        if (count >= 10) {
+          sizeClass = 'w-12 h-12 text-sm';
+          bgClass = 'bg-emerald-800/95 ring-emerald-500/50';
+        } else if (count >= 5) {
+          sizeClass = 'w-11 h-11 text-xs';
+          bgClass = 'bg-emerald-700/95 ring-emerald-400/45';
+        }
+
+        return L.divIcon({
+          html: `
+            <div class="${sizeClass} ${bgClass} rounded-full border-2 border-white ring-4 shadow-lg flex items-center justify-center text-white font-bold font-sans transition-transform hover:scale-110">
+              <span>${count}</span>
+            </div>
+          `,
+          className: 'custom-herb-cluster-icon',
+          iconSize: L.point(44, 44),
+        });
+      },
+    }).addTo(map);
+
     markersGroupRef.current = markersGroup;
     mapInstanceRef.current = map;
 
