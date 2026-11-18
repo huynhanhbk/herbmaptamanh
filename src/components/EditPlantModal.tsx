@@ -26,7 +26,8 @@ import {
   CommuneVillage,
   getConservationStatusLabel,
   getPlantSurveyStatus,
-  getPlantGenus
+  getPlantGenus,
+  getPlantSpecies
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 
@@ -46,12 +47,12 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   if (!isOpen || !plant) return null;
 
   // Form states initialized with plant values
-  const [family, setFamily] = useState(plant.family);
-  const [genus, setGenus] = useState(getPlantGenus(plant));
-  const [species, setSpecies] = useState(plant.species || '');
   const [vietnameseName, setVietnameseName] = useState(plant.vietnameseName);
   const [otherNamesStr, setOtherNamesStr] = useState((plant.otherNames || []).join(', '));
   const [scientificName, setScientificName] = useState(plant.scientificName);
+  const [family, setFamily] = useState(plant.family);
+  const [genus, setGenus] = useState(getPlantGenus(plant));
+  const [species, setSpecies] = useState(getPlantSpecies(plant));
   const [coverImage, setCoverImage] = useState(plant.coverImage);
   const [shortDescription, setShortDescription] = useState(plant.shortDescription || '');
   
@@ -95,18 +96,16 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
   const [unifiedStatus, setUnifiedStatus] = useState<UnifiedConservationStatus>(initialUnifiedStatus);
   const [status, setStatus] = useState<'verified' | 'pending'>(plant.status);
   const [surveyor, setSurveyor] = useState(plant.dataSource?.surveyor || '');
-  const [surveyorAddress, setSurveyorAddress] = useState(plant.dataSource?.surveyorAddress || '');
-  const [surveyorPhone, setSurveyorPhone] = useState(plant.dataSource?.surveyorPhone || '');
 
   // Reset all form states whenever plant or modal opens
   useEffect(() => {
     if (plant) {
-      setFamily(plant.family || '');
-      setGenus(getPlantGenus(plant));
-      setSpecies(plant.species || '');
       setVietnameseName(plant.vietnameseName || '');
       setOtherNamesStr((plant.otherNames || []).join(', '));
       setScientificName(plant.scientificName || '');
+      setFamily(plant.family || '');
+      setGenus(getPlantGenus(plant));
+      setSpecies(getPlantSpecies(plant));
       setCoverImage(plant.coverImage || '');
       setShortDescription(plant.shortDescription || '');
       setGrowthForm(plant.identificationTraits?.growthForm || 'Thân thảo');
@@ -131,8 +130,6 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       setUnifiedStatus(st);
       setStatus(plant.status || 'verified');
       setSurveyor(plant.dataSource?.surveyor || '');
-      setSurveyorAddress(plant.dataSource?.surveyorAddress || '');
-      setSurveyorPhone(plant.dataSource?.surveyorPhone || '');
       setValidationError(null);
       setIsConfirmOpen(false);
     }
@@ -199,12 +196,14 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     const parsedLat = parseFloat(lat);
     const parsedLng = parseFloat(lng);
 
+    const finalUnifiedStatus: UnifiedConservationStatus =
+      status === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)'
+        ? 'Đã ghi nhận'
+        : unifiedStatus;
+
     const conservationLevel: ConservationLevel = 'safe';
     let occurrenceStatus: PlantOccurrenceStatus = 'present';
     let isDisappeared = false;
-
-    const finalUnifiedStatus: UnifiedConservationStatus =
-      status === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)' ? 'Đã ghi nhận' : unifiedStatus;
 
     if (finalUnifiedStatus === 'Biến mất') {
       occurrenceStatus = 'disappeared';
@@ -218,12 +217,12 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     }
 
     const updatedData: Partial<MedicinalPlant> = {
-      family: family.trim() || 'Chưa phân loại',
-      genus: genus.trim() || getPlantGenus({ scientificName: scientificName.trim() }),
-      species: species.trim() || undefined,
       vietnameseName: vietnameseName.trim(),
       otherNames: otherNamesStr.split(',').map((s) => s.trim()).filter(Boolean),
-      scientificName: scientificName.trim() || 'Đang xác minh phân loại học',
+      scientificName: scientificName.trim(),
+      family: family.trim(),
+      genus: genus.trim() || undefined,
+      species: species.trim() || undefined,
       coverImage: coverImage.trim(),
       shortDescription: shortDescription.trim(),
       habitatCategory,
@@ -232,7 +231,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       conservationLevel,
       occurrenceStatus,
       isDisappeared,
-      status: finalUnifiedStatus === 'Điểm mới (Chờ duyệt)' ? 'pending' : status,
+      status,
       identificationTraits: {
         growthForm: growthForm.trim(),
         leaves: leaves.trim(),
@@ -258,8 +257,6 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
       dataSource: {
         ...plant.dataSource,
         surveyor: surveyor.trim() || plant.dataSource.surveyor,
-        surveyorAddress: surveyorAddress.trim() || undefined,
-        surveyorPhone: surveyorPhone.trim() || undefined,
         verifiedBy: status === 'verified' ? 'Ban Chuyên môn KHKT Tam Anh' : undefined,
       },
     };
@@ -363,7 +360,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    1. Tên cây thuốc (Tên tiếng Việt) <span className="text-rose-500">*</span>:
+                    Tên tiếng Việt phổ thông <span className="text-rose-500">*</span>:
                   </label>
                   <input
                     type="text"
@@ -376,13 +373,13 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
 
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    Tên gọi dân gian khác (cách nhau dấu phẩy):
+                    Tên gọi khác / Tên dân gian địa phương:
                   </label>
                   <input
                     type="text"
                     value={otherNamesStr}
                     onChange={(e) => setOtherNamesStr(e.target.value)}
-                    placeholder="Ví dụ: Cà quánh, Cà cườm"
+                    placeholder="Phân cách bằng dấu phẩy, ví dụ: Cà quạnh, Cà cườm"
                     className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
                   />
                 </div>
@@ -391,52 +388,54 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block font-semibold text-stone-700 mb-1">
-                    2. Họ thực vật:
-                  </label>
-                  <input
-                    type="text"
-                    value={family}
-                    onChange={(e) => setFamily(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    3. Chi thực vật:
-                  </label>
-                  <input
-                    type="text"
-                    value={genus}
-                    onChange={(e) => setGenus(e.target.value)}
-                    placeholder="Ví dụ: Chi Solanum"
-                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    4. Loài thực vật:
-                  </label>
-                  <input
-                    type="text"
-                    value={species}
-                    onChange={(e) => setSpecies(e.target.value)}
-                    placeholder="Ví dụ: Cà gai leo / Solanum procumbens"
-                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-stone-700 mb-1">
-                    5. Tên khoa học (In nghiêng):
+                    Tên khoa học (In nghiêng) <span className="text-rose-500">*</span>:
                   </label>
                   <input
                     type="text"
                     value={scientificName}
                     onChange={(e) => setScientificName(e.target.value)}
+                    required
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 font-serif italic"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Họ thực vật <span className="text-rose-500">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    value={family}
+                    onChange={(e) => setFamily(e.target.value)}
+                    required
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Chi thực vật:
+                  </label>
+                  <input
+                    type="text"
+                    value={genus}
+                    onChange={(e) => setGenus(e.target.value)}
+                    placeholder="Ví dụ: Solanum"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 font-serif italic"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-stone-700 mb-1">
+                    Loài thực vật:
+                  </label>
+                  <input
+                    type="text"
+                    value={species}
+                    onChange={(e) => setSpecies(e.target.value)}
+                    placeholder="Ví dụ: Solanum procumbens"
                     className="w-full p-2.5 rounded-xl border border-stone-300 focus:outline-none focus:border-amber-500 bg-stone-50 font-serif italic"
                   />
                 </div>
@@ -488,8 +487,8 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                 />
               </div>
 
-              {/* Status Control & Surveyor Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
+              {/* Status Control */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-amber-50/60 rounded-2xl border border-amber-200/80">
                 <div>
                   <label className="block font-bold text-amber-950 mb-1">
                     Trạng thái kiểm duyệt KHKT:
@@ -497,24 +496,24 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                   <select
                     value={status}
                     onChange={(e) => {
-                      const next = e.target.value as 'verified' | 'pending';
-                      setStatus(next);
-                      if (next === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)') {
+                      const nextStatus = e.target.value as 'verified' | 'pending';
+                      setStatus(nextStatus);
+                      if (nextStatus === 'verified' && unifiedStatus === 'Điểm mới (Chờ duyệt)') {
                         setUnifiedStatus('Đã ghi nhận');
-                      } else if (next === 'pending' && unifiedStatus === 'Đã ghi nhận') {
+                      } else if (nextStatus === 'pending') {
                         setUnifiedStatus('Điểm mới (Chờ duyệt)');
                       }
                     }}
                     className="w-full p-2.5 rounded-xl border border-amber-300 bg-white font-semibold text-amber-900"
                   >
-                    <option value="verified">✅ Đã xác nhận khoa học (Chuyển sang Đã ghi nhận)</option>
+                    <option value="verified">✅ Đã xác nhận khoa học (Xuất bản bản đồ)</option>
                     <option value="pending">⏳ Chờ duyệt bổ sung thực địa</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="block font-bold text-amber-950 mb-1">
-                    Họ tên người khảo sát / Nhóm nghiên cứu:
+                    Người thực hiện khảo sát / Cập nhật:
                   </label>
                   <input
                     type="text"
@@ -522,32 +521,6 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                     onChange={(e) => setSurveyor(e.target.value)}
                     placeholder="Nhóm tác giả đề tài KHKT Tam Anh"
                     className="w-full p-2.5 rounded-xl border border-amber-300 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-950 mb-1">
-                    Địa chỉ người khảo sát:
-                  </label>
-                  <input
-                    type="text"
-                    value={surveyorAddress}
-                    onChange={(e) => setSurveyorAddress(e.target.value)}
-                    placeholder="Thôn Đức Bố, xã Tam Anh..."
-                    className="w-full p-2.5 rounded-xl border border-amber-300 bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-bold text-amber-950 mb-1">
-                    Số điện thoại / Zalo người khảo sát:
-                  </label>
-                  <input
-                    type="text"
-                    value={surveyorPhone}
-                    onChange={(e) => setSurveyorPhone(e.target.value)}
-                    placeholder="0912345678"
-                    className="w-full p-2.5 rounded-xl border border-amber-300 bg-white font-mono"
                   />
                 </div>
               </div>
@@ -726,7 +699,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                         <span>Đã ghi nhận</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Đã ghi nhận phân bố tại điểm khảo sát ngoài thực địa.
+                        Đã xác nhận hiện diện & sinh trưởng ngoài thực địa.
                       </span>
                     </div>
                   </label>
@@ -774,7 +747,7 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
                         <span>Điểm mới (Chờ duyệt)</span>
                       </span>
                       <span className="text-[10.5px] text-stone-500 block leading-tight mt-0.5">
-                        Điểm mới khảo sát / Ghi nhận phát hiện mới chờ duyệt.
+                        Phiếu mới khảo sát, chờ quản trị viên xác nhận.
                       </span>
                     </div>
                   </label>

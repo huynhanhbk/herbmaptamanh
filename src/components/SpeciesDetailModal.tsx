@@ -5,7 +5,8 @@ import {
   PlantMonitoringLog,
   PlantOccurrenceStatus,
   getPlantSurveyStatus,
-  getPlantGenus
+  getPlantGenus,
+  getPlantSpecies
 } from '../types';
 import { compressImageFile } from '../utils/imageCompressor';
 import { HerbMapLogo } from './HerbMapLogo';
@@ -52,7 +53,7 @@ interface SpeciesDetailModalProps {
   onAddMonitoringLog?: (plantId: string, log: Omit<PlantMonitoringLog, 'id' | 'createdAt'>) => void;
   isAdmin?: boolean;
   onApproveMonitoringLog?: (plantId: string, logId: string) => void;
-  onRejectMonitoringLog?: (plantId: string, logId: string) => void;
+  onRejectMonitoringLog?: (plantId: string, logId: string, reason?: string) => void;
   onDeleteMonitoringLog?: (plantId: string, logId: string) => void;
 }
 
@@ -78,6 +79,10 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
   const [newLogContactPhone, setNewLogContactPhone] = useState<string>('');
   const [newLogNote, setNewLogNote] = useState<string>('');
   const [newLogPhoto, setNewLogPhoto] = useState<string>('');
+  const [logValidationError, setLogValidationError] = useState<string | null>(null);
+  const [rejectingLogId, setRejectingLogId] = useState<string | null>(null);
+  const [rejectReasonInput, setRejectReasonInput] = useState<string>('Ảnh không rõ ràng hoặc không khớp vị trí');
+  const [deletingLogId, setDeletingLogId] = useState<string | null>(null);
   const logPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const qrCanvasRef = useRef<HTMLDivElement>(null);
@@ -93,12 +98,18 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
     setNewLogContactPhone('');
     setNewLogNote('');
     setNewLogPhoto('');
+    setLogValidationError(null);
+    setRejectingLogId(null);
+    setRejectReasonInput('Ảnh không rõ ràng hoặc không khớp vị trí');
+    setDeletingLogId(null);
   }, [plant?.id, isAdmin]);
 
   if (!plant) return null;
 
   const statusMeta = getPlantSurveyStatus(plant);
   const isDisappeared = statusMeta.key === 'disappeared';
+  const genusText = getPlantGenus(plant);
+  const speciesText = getPlantSpecies(plant);
 
   // Sort logs by date descending
   const monitoringLogs = [...(plant.monitoringLogs || [])].sort(
@@ -122,8 +133,10 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
 
   const handleSubmitNewLog = (e: React.FormEvent) => {
     e.preventDefault();
+    setLogValidationError(null);
+
     if (!newLogDate || !newLogNote.trim() || !newLogSurveyor.trim()) {
-      alert('Vui lòng điền đầy đủ ngày kiểm tra, người giám sát và ghi chú tình trạng thực địa.');
+      setLogValidationError('Vui lòng điền đầy đủ ngày kiểm tra, người giám sát và ghi chú tình trạng thực địa.');
       return;
     }
 
@@ -140,6 +153,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
       setNewLogNote('');
       setNewLogPhoto('');
       setNewLogContactPhone('');
+      setLogValidationError(null);
     }
   };
 
@@ -299,6 +313,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
             </div>
           )}
 
+
+
           {/* QR Card Drawer if opened */}
           {showQRCard && (
             <div className="bg-gradient-to-br from-emerald-950 to-stone-900 p-5 rounded-2xl text-white border border-emerald-800/60 shadow-xl space-y-4 animate-slideDown">
@@ -386,14 +402,16 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   <span className="text-stone-500">Họ thực vật:</span>
                   <span className="font-semibold text-stone-900">{plant.family}</span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-stone-500">Chi thực vật:</span>
-                  <span className="font-semibold text-stone-900">{getPlantGenus(plant)}</span>
-                </div>
-                {plant.species && (
+                {genusText && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-stone-500">Chi thực vật:</span>
+                    <span className="font-medium text-stone-800 italic font-serif">{genusText}</span>
+                  </div>
+                )}
+                {speciesText && (
                   <div className="flex items-center justify-between">
                     <span className="text-stone-500">Loài thực vật:</span>
-                    <span className="font-semibold text-stone-900">{plant.species}</span>
+                    <span className="font-medium text-stone-800 italic font-serif">{speciesText}</span>
                   </div>
                 )}
                 {plant.otherNames && plant.otherNames.length > 0 && (
@@ -710,7 +728,7 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                       />
                       <div className="text-[11px]">
                         <span className="font-bold block">🟢 Đã ghi nhận</span>
-                        <span className="text-[10px] text-stone-500">Còn tồn tại, phát triển ổn định</span>
+                        <span className="text-[10px] text-stone-500">Còn tồn tại / phát triển ổn định</span>
                       </div>
                     </label>
 
@@ -751,6 +769,13 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   />
                 </div>
 
+                {logValidationError && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-[11px] flex items-center gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                    <span>{logValidationError}</span>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between gap-3 pt-1">
                   <div className="flex items-center gap-2">
                     <button
@@ -778,7 +803,10 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setIsAddingLog(false)}
+                      onClick={() => {
+                        setIsAddingLog(false);
+                        setLogValidationError(null);
+                      }}
                       className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 text-xs font-medium"
                     >
                       Hủy
@@ -827,6 +855,10 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                       dotColor = 'bg-stone-600 ring-stone-200';
                       badgeBg = 'bg-stone-100 text-stone-800 border-stone-300';
                       statusTitle = '⚫ Biến mất khỏi thực địa';
+                    } else if (log.status === 'new') {
+                      dotColor = 'bg-purple-500 ring-purple-200';
+                      badgeBg = 'bg-purple-100 text-purple-800 border-purple-200';
+                      statusTitle = '🟣 Điểm mới (Chờ duyệt)';
                     }
 
                     if (isPending) {
@@ -927,10 +959,9 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      const reason = prompt('Nhập lý do từ chối đợt báo cáo thực địa này (tùy chọn):', 'Ảnh không rõ ràng hoặc không khớp vị trí');
-                                      if (reason !== null) {
-                                        onRejectMonitoringLog(plant.id, log.id);
-                                      }
+                                      setRejectingLogId(rejectingLogId === log.id ? null : log.id);
+                                      setDeletingLogId(null);
+                                      setRejectReasonInput('Ảnh không rõ ràng hoặc không khớp vị trí');
                                     }}
                                     className="px-2.5 py-1 rounded-lg bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold text-[11px] flex items-center gap-1 transition-colors"
                                     title="Từ chối đợt báo cáo này"
@@ -944,9 +975,8 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                                   <button
                                     type="button"
                                     onClick={() => {
-                                      if (confirm(`Xóa bản ghi đợt kiểm tra ngày ${log.date}?`)) {
-                                        onDeleteMonitoringLog(plant.id, log.id);
-                                      }
+                                      setDeletingLogId(deletingLogId === log.id ? null : log.id);
+                                      setRejectingLogId(null);
                                     }}
                                     className="p-1 text-stone-400 hover:text-rose-600 rounded-lg hover:bg-stone-200 transition-colors"
                                     title="Xóa bản ghi này"
@@ -963,6 +993,70 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
                               )
                             )}
                           </div>
+
+                          {/* Inline Reject Reason Confirmation */}
+                          {isAdmin && rejectingLogId === log.id && onRejectMonitoringLog && (
+                            <div className="mt-2.5 p-2.5 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+                              <label className="block text-[11px] font-semibold text-rose-900">
+                                Lý do từ chối đợt báo cáo thực địa:
+                              </label>
+                              <div className="flex flex-col sm:flex-row gap-2">
+                                <input
+                                  type="text"
+                                  value={rejectReasonInput}
+                                  onChange={(e) => setRejectReasonInput(e.target.value)}
+                                  className="flex-1 px-2.5 py-1 text-[11px] rounded-lg border border-rose-300 bg-white text-stone-800 focus:outline-none focus:border-rose-500"
+                                />
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => setRejectingLogId(null)}
+                                    className="px-2.5 py-1 rounded-lg bg-white border border-stone-200 text-stone-600 text-[11px] font-medium"
+                                  >
+                                    Hủy
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      onRejectMonitoringLog(plant.id, log.id, rejectReasonInput.trim() || undefined);
+                                      setRejectingLogId(null);
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold"
+                                  >
+                                    Xác nhận từ chối
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Inline Delete Log Confirmation */}
+                          {isAdmin && deletingLogId === log.id && onDeleteMonitoringLog && (
+                            <div className="mt-2.5 p-2.5 rounded-xl bg-stone-100 border border-stone-300 flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-[11px] font-semibold text-stone-800">
+                                Xác nhận xóa bản ghi đợt kiểm tra ngày {log.date}?
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingLogId(null)}
+                                  className="px-2.5 py-1 rounded-lg bg-white border border-stone-300 text-stone-600 text-[11px] font-medium"
+                                >
+                                  Hủy
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onDeleteMonitoringLog(plant.id, log.id);
+                                    setDeletingLogId(null);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold"
+                                >
+                                  Xóa bản ghi
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -983,16 +1077,6 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
             <p>
               👤 <b>Người khảo sát / Thu thập:</b> {plant.dataSource.surveyor} (Ngày {plant.dataSource.surveyDate})
             </p>
-            {plant.dataSource.surveyorAddress && (
-              <p>
-                📍 <b>Địa chỉ người khảo sát:</b> {plant.dataSource.surveyorAddress}
-              </p>
-            )}
-            {plant.dataSource.surveyorPhone && (
-              <p>
-                📞 <b>Số điện thoại / Zalo:</b> {plant.dataSource.surveyorPhone}
-              </p>
-            )}
             {plant.dataSource.verifiedBy && (
               <p>
                 ✅ <b>Chuyên môn thẩm định:</b> {plant.dataSource.verifiedBy}

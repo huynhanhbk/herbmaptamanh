@@ -1,8 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import L from 'leaflet';
-import 'leaflet.markercluster';
-import 'leaflet.markercluster/dist/MarkerCluster.css';
-import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
 import { 
   MedicinalPlant, 
   HabitatCategory, 
@@ -57,8 +54,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 }) => {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
-  const markersGroupRef = useRef<L.MarkerClusterGroup | null>(null);
-  const markersByIdRef = useRef<Map<string, L.Marker>>(new Map());
+  const markersGroupRef = useRef<L.LayerGroup | null>(null);
   const userLocationMarkerRef = useRef<L.Marker | null>(null);
 
   // Filters inside map view - Unified 5 status filters
@@ -136,8 +132,8 @@ export const HerbMap: React.FC<HerbMapProps> = ({
     }
   };
 
-  // Default Tam Anh Center Coordinates (Xã Tam Anh mới, TP. Đà Nẵng: 15°29′06″ B, 108°35′02″ Đ)
-  const TAM_ANH_CENTER = [15.4848, 108.5840] as [number, number];
+  // Default Tam Anh Center Coordinates (Núi Thành, Quảng Nam)
+  const TAM_ANH_CENTER = [15.4625, 108.6180] as [number, number];
 
   // Initialize Map
   useEffect(() => {
@@ -161,40 +157,13 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     osmLayer.addTo(map);
 
-    const markersGroup = L.markerClusterGroup({
-      showCoverageOnHover: false,
-      zoomToBoundsOnClick: true,
-      spiderfyOnMaxZoom: true,
-      maxClusterRadius: 45,
-      iconCreateFunction: (cluster) => {
-        const count = cluster.getChildCount();
-        let sizePx = 40;
-        let sizeClass = 'w-10 h-10 text-xs';
-        let colorClass = 'bg-emerald-600/95 ring-emerald-300/60';
-        if (count >= 20) {
-          sizePx = 48;
-          sizeClass = 'w-12 h-12 text-sm';
-          colorClass = 'bg-teal-700/95 ring-teal-300/60';
-        } else if (count >= 10) {
-          sizePx = 44;
-          sizeClass = 'w-11 h-11 text-xs';
-          colorClass = 'bg-emerald-700/95 ring-emerald-300/60';
-        }
-        return L.divIcon({
-          html: `<div class="${sizeClass} ${colorClass} ring-4 border-2 border-white rounded-full flex items-center justify-center text-white font-extrabold shadow-xl transition-transform hover:scale-105">${count}</div>`,
-          className: 'custom-herb-cluster-icon',
-          iconSize: L.point(sizePx, sizePx),
-        });
-      },
-    }).addTo(map);
+    const markersGroup = L.layerGroup().addTo(map);
     markersGroupRef.current = markersGroup;
     mapInstanceRef.current = map;
 
     return () => {
       map.remove();
       mapInstanceRef.current = null;
-      markersGroupRef.current = null;
-      markersByIdRef.current.clear();
     };
   }, []);
 
@@ -256,9 +225,9 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
   /**
    * Create custom marker icon strictly following the 3 unified survey statuses:
-   * 1. recorded (Đã ghi nhận): Emerald Green with Leaf SVG
-   * 2. disappeared (Biến mất): Dark Stone with X SVG
-   * 3. new (Điểm mới (Chờ duyệt)): Violet Purple with Sparkles/Star SVG
+   * 1. recorded: Emerald Green with Leaf SVG (Đã ghi nhận)
+   * 2. disappeared: Dark Stone with X SVG (Biến mất)
+   * 3. new: Violet Purple with Sparkles/Star SVG (Điểm mới (Chờ duyệt))
    */
   const createHerbIcon = (plant: MedicinalPlant, isSelected: boolean) => {
     const statusMeta = getPlantSurveyStatus(plant);
@@ -319,9 +288,6 @@ export const HerbMap: React.FC<HerbMapProps> = ({
 
     const markersGroup = markersGroupRef.current;
     markersGroup.clearLayers();
-    markersByIdRef.current.clear();
-
-    const newMarkers: L.Marker[] = [];
 
     filteredPlants.forEach((plant) => {
       const isSelected = selectedPlantId === plant.id;
@@ -385,27 +351,15 @@ export const HerbMap: React.FC<HerbMapProps> = ({
         onSelectPlant(plant);
       });
 
-      markersByIdRef.current.set(plant.id, marker);
-      newMarkers.push(marker);
+      markersGroup.addLayer(marker);
     });
-
-    if (newMarkers.length > 0) {
-      markersGroup.addLayers(newMarkers);
-    }
   }, [filteredPlants, selectedPlantId, onSelectPlant]);
 
-  // Center on Selected Plant when selectedPlantId changes (and expand cluster if needed)
+  // Center on Selected Plant when selectedPlantId changes
   useEffect(() => {
     if (!selectedPlantId || !mapInstanceRef.current) return;
     const plant = plants.find((p) => p.id === selectedPlantId);
-    if (!plant) return;
-
-    const targetMarker = markersByIdRef.current.get(selectedPlantId);
-    if (targetMarker && markersGroupRef.current) {
-      markersGroupRef.current.zoomToShowLayer(targetMarker, () => {
-        targetMarker.openPopup();
-      });
-    } else {
+    if (plant) {
       mapInstanceRef.current.setView([plant.location.lat, plant.location.lng], 16, {
         animate: true,
       });
@@ -551,7 +505,7 @@ export const HerbMap: React.FC<HerbMapProps> = ({
             </div>
           </div>
 
-          {/* Quick 3-Status Field Survey Filter Pills Row */}
+          {/* Quick 3-Status Field Survey Filter Pills Row (Always visible, uncluttered) */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none text-xs">
             <button
               onClick={() => setSelectedStatus('all')}

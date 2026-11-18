@@ -1,4 +1,4 @@
-import { MedicinalPlant, getPlantGenus } from '../types';
+import { MedicinalPlant } from '../types';
 
 /**
  * Removes Vietnamese accents/diacritics and normalizes string for fuzzy/unaccented searching.
@@ -20,7 +20,7 @@ export function removeVietnameseTones(str: string): string {
  * - Exact / substring match
  * - Accent-insensitive Vietnamese matching
  * - Multi-token search (all query terms present in any combination of fields)
- * - Searching by Vietnamese name, other names, scientific name, family, genus, remedy, part used, preparation, habitat, location, and ID.
+ * - Searching by Vietnamese name, other names, scientific name, family, remedy, part used, preparation, habitat, location, and ID.
  */
 export function matchPlantSearch(plant: MedicinalPlant, query: string): boolean {
   if (!query || !query.trim()) return true;
@@ -36,10 +36,10 @@ export function matchPlantSearch(plant: MedicinalPlant, query: string): boolean 
     plant.id,
     plant.vietnameseName,
     ...(plant.otherNames || []),
+    plant.genus || '',
+    plant.species || '',
     plant.scientificName,
     plant.family,
-    plant.genus || getPlantGenus(plant),
-    plant.species || '',
     plant.habitat,
     plant.habitatCategory,
     plant.shortDescription || '',

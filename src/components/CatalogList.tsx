@@ -8,7 +8,6 @@ import {
   getHabitatLabel,
   getConservationStatusLabel,
   getPlantSurveyStatus,
-  getPlantGenus,
   SurveyPointStatusKey
 } from '../types';
 import { 
@@ -75,7 +74,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
         }
       }
 
-      // 03 field survey statuses filter
+      // 04 field survey statuses filter
       if (selectedOccurrence !== 'all' && statusMeta.key !== selectedOccurrence) {
         return false;
       }
@@ -206,7 +205,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                 ? 'bg-purple-700 text-white font-bold shadow-xs'
                 : 'bg-purple-50 hover:bg-purple-100 text-purple-800'
             }`}
-            title="Điểm mới khảo sát hoặc cộng đồng đóng góp chờ quản trị viên duyệt"
+            title="Điểm mới khảo sát đang chờ quản trị viên duyệt"
           >
             <span>🟣 Điểm mới (Chờ duyệt)</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-900/40 text-purple-100 font-mono">
@@ -346,9 +345,6 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                       <p className="text-xs text-stone-500 italic font-serif mt-0.5">
                         {plant.scientificName}
                       </p>
-                      <p className="text-[11px] text-stone-500 mt-0.5 truncate">
-                        {plant.family} → {getPlantGenus(plant)}
-                      </p>
                     </div>
 
                     {isPlantDisappeared ? (
@@ -362,7 +358,7 @@ export const CatalogList: React.FC<CatalogListProps> = ({
                       </div>
                     ) : statusMeta.key === 'new' ? (
                       <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded-xl text-[11px] text-purple-900 flex items-center gap-1.5">
-                        <span>🟣 <b>Hiện trạng:</b> Điểm mới (Chờ duyệt) từ khảo sát / đóng góp cộng đồng.</span>
+                        <span>🟣 <b>Hiện trạng:</b> Điểm mới (Chờ duyệt) từ khảo sát thực địa.</span>
                       </div>
                     ) : (
                       <p className="text-xs text-stone-600 line-clamp-2 mt-2 leading-relaxed font-normal">

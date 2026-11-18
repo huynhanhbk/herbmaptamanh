@@ -76,26 +76,17 @@ export function getHabitatLabel(cat: HabitatCategory | string): string {
 
 export type ConservationLevel = 'safe' | 'vulnerable' | 'endangered';
 
-export type UnifiedConservationStatus =
-  | 'Đã ghi nhận'
-  | 'Biến mất'
-  | 'Điểm mới (Chờ duyệt)'
-  | 'An toàn'
-  | 'Bị suy giảm'
-  | 'Điểm mới'
-  | 'Sắp nguy cấp'
-  | 'Nguy cấp / Cần bảo tồn'
-  | 'Đã biến mất';
+export type UnifiedConservationStatus = 'Đã ghi nhận' | 'Biến mất' | 'Điểm mới (Chờ duyệt)';
 
-export type PlantOccurrenceStatus =
-  | 'present'       // Đã ghi nhận
-  | 'safe'          // Legacy alias -> Đã ghi nhận
-  | 'degraded'      // Legacy alias -> Đã ghi nhận
+export type PlantOccurrenceStatus = 
+  | 'present'       // Đã ghi nhận / Còn tồn tại
+  | 'safe'          // Alias tương thích ngược cho Đã ghi nhận
+  | 'degraded'      // Alias tương thích ngược cho dữ liệu cũ -> quy đổi về Đã ghi nhận
   | 'disappeared'   // Biến mất / Không còn tìm thấy tại tọa độ này
   | 'new';          // Điểm mới (Chờ duyệt)
 
 /**
- * 03 Trạng thái Hiện trạng thực địa:
+ * 03 Trạng thái Hiện trạng thực địa được khảo sát theo quy trình chuẩn:
  * 1. recorded: Đã ghi nhận (Màu xanh lục)
  * 2. disappeared: Biến mất (Màu xám đen)
  * 3. new: Điểm mới (Chờ duyệt) (Màu tím)
@@ -121,7 +112,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   recorded: {
     key: 'recorded',
     label: 'Đã ghi nhận',
-    subLabel: 'Đã xác nhận ngoài thực địa',
+    subLabel: 'Đã xác nhận hiện diện thực địa',
     colorHex: '#059669',
     bgClass: 'bg-emerald-600',
     textClass: 'text-emerald-700',
@@ -130,7 +121,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
     markerBg: 'bg-emerald-600',
     markerRing: 'ring-emerald-400/60',
     emoji: '🟢',
-    description: 'Điểm khảo sát cây thuốc đã được ghi nhận và xác nhận ngoài thực địa.',
+    description: 'Quần thể cây thuốc đã được ghi nhận và xác nhận hiện diện tại điểm khảo sát thực địa.',
   },
   disappeared: {
     key: 'disappeared',
@@ -149,7 +140,7 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
   new: {
     key: 'new',
     label: 'Điểm mới (Chờ duyệt)',
-    subLabel: 'Mới khảo sát / Chờ duyệt',
+    subLabel: 'Mới khảo sát / Chờ quản trị viên duyệt',
     colorHex: '#7c3aed',
     bgClass: 'bg-purple-600',
     textClass: 'text-purple-700',
@@ -158,15 +149,15 @@ export const SURVEY_POINT_STATUS_CONFIG: Record<SurveyPointStatusKey, SurveyPoin
     markerBg: 'bg-purple-600',
     markerRing: 'ring-purple-400/60',
     emoji: '🟣',
-    description: 'Điểm khảo sát mới được ghi nhận bổ sung và đang chờ Ban Quản trị phê duyệt.',
+    description: 'Phiếu khảo sát mới được ghi nhận, đang chờ quản trị viên xác nhận để chuyển sang trạng thái Đã ghi nhận.',
   },
 };
 
 /**
  * Phân định chính xác 03 trạng thái hiện trạng thực địa:
- * 1. 'disappeared': Biến mất
- * 2. 'new': Điểm mới (Chờ duyệt)
- * 3. 'recorded': Đã ghi nhận (mặc định, bao gồm cả dữ liệu cũ 'An toàn' hoặc 'Bị suy giảm')
+ * 1. 'new': Điểm mới (Chờ duyệt)
+ * 2. 'disappeared': Biến mất
+ * 3. 'recorded': Đã ghi nhận (mặc định & quy đổi từ dữ liệu đã xác nhận)
  */
 export function getPlantSurveyStatus(plant: {
   status?: string;
@@ -176,17 +167,7 @@ export function getPlantSurveyStatus(plant: {
   isDisappeared?: boolean;
   isNewPoint?: boolean;
 }): SurveyPointStatusMeta {
-  // 1. Biến mất
-  if (
-    plant.isDisappeared ||
-    plant.occurrenceStatus === 'disappeared' ||
-    plant.conservationStatus === 'Đã biến mất' ||
-    plant.conservationStatus === 'Biến mất' ||
-    plant.conservationLevel === ('disappeared' as any)
-  ) {
-    return SURVEY_POINT_STATUS_CONFIG.disappeared;
-  }
-  // 2. Điểm mới (Chờ duyệt)
+  // 1. Điểm mới (Chờ duyệt)
   if (
     plant.status === 'pending' ||
     (plant as any).isNewPoint ||
@@ -196,6 +177,16 @@ export function getPlantSurveyStatus(plant: {
   ) {
     return SURVEY_POINT_STATUS_CONFIG.new;
   }
+  // 2. Biến mất
+  if (
+    plant.isDisappeared || 
+    plant.occurrenceStatus === 'disappeared' || 
+    plant.conservationStatus === 'Đã biến mất' ||
+    plant.conservationStatus === 'Biến mất' ||
+    plant.conservationLevel === ('disappeared' as any)
+  ) {
+    return SURVEY_POINT_STATUS_CONFIG.disappeared;
+  }
   // 3. Đã ghi nhận
   return SURVEY_POINT_STATUS_CONFIG.recorded;
 }
@@ -204,10 +195,10 @@ export interface PlantMonitoringLog {
   id: string;
   date: string; // YYYY-MM-DD
   status: PlantOccurrenceStatus;
-  conservationStatus?: UnifiedConservationStatus;
+  conservationStatus?: UnifiedConservationStatus; // Trạng thái thực tế tại đợt giám sát
   statusNote: string; // Ghi chú chi tiết (nguyên nhân thay đổi, tác động môi trường, thu hoạch...)
   surveyor: string; // Người / Đoàn giám sát
-  contactPhone?: string; // Số điện thoại liên hệ xác minh của người gửi
+  contactPhone?: string; // Số điện thoại liên hệ xác minh của người gửi (lưu tách biệt trong collection bảo mật)
   evidencePhoto?: string; // Ảnh chụp thực địa đợt kiểm tra mới
   createdAt: string;
   approvalStatus?: 'approved' | 'pending' | 'rejected'; // Trạng thái: approved (Admin duyệt ngay), pending (Người lạ/cộng đồng gửi)
@@ -223,27 +214,18 @@ export function getConservationStatusLabel(
   occurrenceStatus?: string
 ): UnifiedConservationStatus {
   if (isDisappeared || occurrenceStatus === 'disappeared') return 'Biến mất';
-  if (occurrenceStatus === 'new') return 'Điểm mới (Chờ duyệt)';
-  if (!statusOrLevel) return 'Đã ghi nhận';
+  if (!statusOrLevel) {
+    if (occurrenceStatus === 'new') return 'Điểm mới (Chờ duyệt)';
+    return 'Đã ghi nhận';
+  }
   const str = String(statusOrLevel).trim().toLowerCase();
   if (str.includes('biến mất') || str.includes('disappeared') || str.includes('đã mất') || str.includes('bien mat')) {
     return 'Biến mất';
   }
-  if (str.includes('điểm mới') || str.includes('diem moi') || str.includes('chờ duyệt') || str === 'new' || str === 'pending') {
+  if (str.includes('mới') || str === 'new' || str === 'pending' || str.includes('chờ duyệt')) {
     return 'Điểm mới (Chờ duyệt)';
   }
   return 'Đã ghi nhận';
-}
-
-export function getPlantGenus(plant: { genus?: string; scientificName?: string }): string {
-  if (plant.genus && plant.genus.trim()) return plant.genus.trim();
-  const sci = (plant.scientificName || '').trim();
-  if (!sci || sci.toLowerCase().includes('đang xác minh')) return 'Chưa xác định';
-  const firstWord = sci.split(/\s+/)[0];
-  if (firstWord && /^[A-Z][a-z-]+$/.test(firstWord)) {
-    return `Chi ${firstWord}`;
-  }
-  return 'Chưa xác định';
 }
 
 export type DataSourceType = 'research_heritage' | 'field_survey_2026' | 'community_contribution';
@@ -297,8 +279,8 @@ export interface MedicinalPlant {
   otherNames?: string[];
   scientificName: string;
   family: string;
-  genus?: string;
-  species?: string;
+  genus?: string;   // Chi thực vật
+  species?: string; // Loài thực vật
   coverImage: string;
   photos: PlantPhoto[];
   shortDescription: string;
@@ -320,12 +302,34 @@ export interface MedicinalPlant {
   updatedAt: string;
 }
 
+export function getPlantGenus(plant: { genus?: string; scientificName?: string }): string {
+  if (plant.genus && plant.genus.trim()) return plant.genus.trim();
+  const sci = (plant.scientificName || '').trim();
+  if (!sci || sci.toLowerCase().includes('đang xác minh') || sci.toLowerCase().includes('chưa xác định')) {
+    return '';
+  }
+  const parts = sci.split(/\s+/);
+  return parts[0] || '';
+}
+
+export function getPlantSpecies(plant: { species?: string; scientificName?: string }): string {
+  if (plant.species && plant.species.trim()) return plant.species.trim();
+  const sci = (plant.scientificName || '').trim();
+  if (!sci || sci.toLowerCase().includes('đang xác minh') || sci.toLowerCase().includes('chưa xác định')) {
+    return '';
+  }
+  const parts = sci.split(/\s+/);
+  if (parts.length >= 2) {
+    return `${parts[0]} ${parts[1]}`;
+  }
+  return parts[0] || '';
+}
+
 export interface AICandidate {
   vietnameseName: string;
   otherNames?: string;
   scientificName: string;
   family: string;
-  genus?: string;
   confidence: number;
   observedFeatures: string[];
   habitatInCentralVietnam?: string;

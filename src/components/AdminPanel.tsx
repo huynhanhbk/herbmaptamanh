@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MedicinalPlant, PlantMonitoringLog, getPlantGenus } from '../types';
+import { MedicinalPlant, PlantMonitoringLog } from '../types';
 import { 
   ShieldCheck, 
   Trash2, 
@@ -43,7 +43,6 @@ import {
   rejectPlantMonitoringLog,
   deletePlantMonitoringLog
 } from '../utils/storage';
-import { PendingCommunitySurvey } from '../lib/plantSync';
 import { matchPlantSearch } from '../utils/searchHelper';
 import { EditPlantModal } from './EditPlantModal';
 import { DataImportModal } from './DataImportModal';
@@ -55,9 +54,6 @@ interface AdminPanelProps {
   onSelectPlant: (plant: MedicinalPlant) => void;
   onLocateOnMap: (plant: MedicinalPlant) => void;
   onLogoutAdmin: () => void;
-  adminEmail?: string | null;
-  externalPendingSurveys?: PendingCommunitySurvey[];
-  onExternalSurveysUpdated?: (surveys: PendingCommunitySurvey[]) => void;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -66,9 +62,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onSelectPlant,
   onLocateOnMap,
   onLogoutAdmin,
-  adminEmail,
-  externalPendingSurveys = [],
-  onExternalSurveysUpdated,
 }) => {
   const [activeTab, setActiveTab] = useState<'plants' | 'monitoring'>('plants');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'verified'>('all');
@@ -76,13 +69,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [editingPlant, setEditingPlant] = useState<MedicinalPlant | null>(null);
   const [deleteConfirmPlant, setDeleteConfirmPlant] = useState<{ id: string; name: string } | null>(null);
-  const [rejectLogState, setRejectLogState] = useState<{
-    plantId: string;
-    logId: string;
-    plantName: string;
-    reason: string;
-    externalPendingSurvey?: PendingCommunitySurvey;
-  } | null>(null);
+  const [rejectLogState, setRejectLogState] = useState<{ plantId: string; logId: string; plantName: string; reason: string } | null>(null);
   const [deleteLogState, setDeleteLogState] = useState<{ plantId: string; logId: string } | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState<boolean>(false);
   
@@ -116,13 +103,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const handleApprove = (id: string, name: string) => {
     const updated = updatePlantStatus(id, 'verified');
     onPlantsUpdated(updated);
-    showNotice(`Đã duyệt phiếu khảo sát "${name}" — trạng thái cây đã chuyển sang "Đã ghi nhận"!`);
+    showNotice(`Đã duyệt phiếu "${name}" & chuyển trạng thái sang "Đã ghi nhận"!`);
   };
 
   const handleRevertToPending = (id: string, name: string) => {
     const updated = updatePlantStatus(id, 'pending');
     onPlantsUpdated(updated);
-    showNotice(`Đã chuyển loài "${name}" về trạng thái Chờ duyệt.`);
+    showNotice(`Đã chuyển loài "${name}" về trạng thái "Điểm mới (Chờ duyệt)".`);
   };
 
   const handleOpenEdit = (plant: MedicinalPlant) => {
@@ -159,47 +146,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setDeleteConfirmPlant(null);
   };
 
-  const handleApproveLog = (
-    plantId: string,
-    logId: string,
-    plantName: string,
-    externalPendingSurvey?: PendingCommunitySurvey
-  ) => {
-    const reviewerLabel = adminEmail ? `Ban Quản trị (${adminEmail})` : 'Ban Quản trị (Admin)';
-    const updated = approvePlantMonitoringLog(plantId, logId, reviewerLabel, externalPendingSurvey);
+  const handleApproveLog = (plantId: string, logId: string, plantName: string) => {
+    const updated = approvePlantMonitoringLog(plantId, logId, 'Ban Quản trị (Admin)');
     onPlantsUpdated(updated);
-    if (externalPendingSurvey && onExternalSurveysUpdated) {
-      onExternalSurveysUpdated(externalPendingSurveysFilter(externalPendingSurveys, logId));
-    }
     showNotice(`Đã phê duyệt đợt kiểm tra thực địa cho loài "${plantName}"!`);
   };
 
-  const externalPendingSurveysFilter = (list: PendingCommunitySurvey[], removedId: string) =>
-    list.filter((s) => s.id !== removedId);
-
-  const handleRejectLog = (
-    plantId: string,
-    logId: string,
-    plantName: string,
-    externalPendingSurvey?: PendingCommunitySurvey
-  ) => {
+  const handleRejectLog = (plantId: string, logId: string, plantName: string) => {
     setRejectLogState({ 
       plantId, 
       logId, 
       plantName, 
       reason: 'Ảnh không rõ ràng hoặc thông tin chưa chính xác ngoài thực địa',
-      externalPendingSurvey,
     });
   };
 
   const confirmRejectLog = () => {
     if (!rejectLogState) return;
-    const { plantId, logId, plantName, reason, externalPendingSurvey } = rejectLogState;
-    const updated = rejectPlantMonitoringLog(plantId, logId, reason, externalPendingSurvey);
+    const { plantId, logId, plantName, reason } = rejectLogState;
+    const updated = rejectPlantMonitoringLog(plantId, logId, reason);
     onPlantsUpdated(updated);
-    if (externalPendingSurvey && onExternalSurveysUpdated) {
-      onExternalSurveysUpdated(externalPendingSurveysFilter(externalPendingSurveys, logId));
-    }
     showNotice(`Đã từ chối đợt báo cáo cho loài "${plantName}".`);
     setRejectLogState(null);
   };
@@ -262,22 +228,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const pendingCount = plants.filter((p) => p.status === 'pending').length;
   const verifiedCount = plants.filter((p) => p.status === 'verified').length;
 
-  const pendingMonitoringLogs = getAllPendingMonitoringLogs(plants, externalPendingSurveys);
+  const pendingMonitoringLogs = getAllPendingMonitoringLogs(plants);
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       {/* Admin Header Banner */}
       <div className="bg-gradient-to-r from-amber-950 via-stone-900 to-stone-950 p-6 sm:p-8 rounded-3xl text-white shadow-xl border border-amber-800/40 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
-          <div className="flex flex-wrap items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1">
             <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-800 text-amber-200 border border-amber-600/50 flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" /> Ban Chuyên Môn / Quản Trị Viên
             </span>
-            {adminEmail && (
-              <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-950/90 text-emerald-300 border border-emerald-700/60 font-medium">
-                ✓ {adminEmail}
-              </span>
-            )}
             <span className="text-xs text-stone-400">Hội Đồng KHKT Xã Tam Anh</span>
           </div>
           <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight">
@@ -548,7 +509,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <th className="p-3.5">Phân loại & Sinh cảnh</th>
                     <th className="p-3.5">Tọa độ GPS & Khu vực</th>
                     <th className="p-3.5">Tri thức dân gian</th>
-                    <th className="p-3.5">Người khảo sát & Liên hệ</th>
                     <th className="p-3.5">Trạng thái</th>
                     <th className="p-3.5 pr-5 text-right">Thao tác</th>
                   </tr>
@@ -556,24 +516,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <tbody className="divide-y divide-stone-100 text-stone-700">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="text-center py-10 text-stone-400">
+                      <td colSpan={6} className="text-center py-10 text-stone-400">
                         Không có bản ghi nào phù hợp với bộ lọc.
                       </td>
                     </tr>
                   ) : (
                     filtered.map((plant) => {
                       const isPending = plant.status === 'pending';
-                      const surveyorName = plant.dataSource?.surveyor || '—';
-                      const surveyorPhone = plant.dataSource?.surveyorPhone?.trim();
-                      const surveyorAddress = plant.dataSource?.surveyorAddress?.trim();
 
                       return (
-                        <tr
-                          key={plant.id}
-                          className={`transition-colors ${
-                            isPending ? 'bg-purple-50/35 hover:bg-purple-50/70' : 'hover:bg-stone-50/80'
-                          }`}
-                        >
+                        <tr key={plant.id} className="hover:bg-stone-50/80 transition-colors">
                           {/* Photo & Name */}
                           <td className="p-3.5 pl-5">
                             <div className="flex items-center gap-3">
@@ -600,10 +552,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </div>
                           </td>
 
-                          {/* Family, Genus & Habitat */}
+                          {/* Family & Habitat */}
                           <td className="p-3.5">
                             <span className="text-stone-900 font-medium block">{plant.family}</span>
-                            <span className="text-[11px] text-emerald-700 font-medium block">{getPlantGenus(plant)}</span>
                             <span className="text-[11px] text-stone-500">{plant.habitat}</span>
                           </td>
 
@@ -613,59 +564,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <MapPin className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                               <span>{plant.location.lat.toFixed(5)}, {plant.location.lng.toFixed(5)}</span>
                             </div>
-                            <span className="text-[11px] text-stone-600 block mt-0.5 max-w-[200px]">
-                              {plant.location.addressDescription || plant.location.communeSection || 'Xã Tam Anh, TP. Đà Nẵng'}
+                            <span className="text-[11px] text-stone-600 block mt-0.5">
+                              {plant.location.addressDescription || 'Tam Anh, TP.Đà Nẵng'}
                             </span>
                           </td>
 
-                          {/* Traditional Uses */}
-                          <td className="p-3.5 max-w-[220px]">
+                          {/* Traditional Uses & Surveyor PII (Admin only) */}
+                          <td className="p-3.5 max-w-xs">
                             <p className="line-clamp-2 text-[11px] text-stone-600">
                               {(plant.traditionalUses.folkRemedies || []).join('; ') || plant.traditionalUses.preparation}
                             </p>
-                            {plant.traditionalUses?.informantName && (
-                              <span className="text-[10px] text-stone-400 block mt-0.5 truncate">
-                                Nguồn bài thuốc: {plant.traditionalUses.informantName}
+                            <span className="text-[10px] text-stone-400 block mt-0.5">
+                              Nguồn: {plant.traditionalUses.informantName} ({plant.traditionalUses.informantRole})
+                            </span>
+                            {(plant.dataSource.surveyorPhone || plant.dataSource.surveyorAddress) && (
+                              <span className="text-[10px] text-emerald-800 block mt-0.5 font-medium">
+                                👤 {plant.dataSource.surveyor}
+                                {plant.dataSource.surveyorPhone ? ` • 📞 ${plant.dataSource.surveyorPhone}` : ''}
+                                {plant.dataSource.surveyorAddress ? ` • 📍 ${plant.dataSource.surveyorAddress}` : ''}
                               </span>
                             )}
-                          </td>
-
-                          {/* Surveyor Full Contact Info (Name, Phone/Zalo, Address) */}
-                          <td className="p-3.5 min-w-[210px] max-w-[260px]">
-                            <div
-                              className={`p-2 rounded-xl border space-y-1 ${
-                                isPending
-                                  ? 'bg-white border-purple-200 shadow-2xs'
-                                  : 'bg-stone-50/80 border-stone-200/70'
-                              }`}
-                            >
-                              <div className="flex items-start gap-1.5 text-[11px] text-stone-900 font-bold leading-snug">
-                                <User className="w-3.5 h-3.5 text-stone-500 shrink-0 mt-0.5" />
-                                <span>{surveyorName}</span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 text-[11px]">
-                                <Phone className="w-3 h-3 text-emerald-600 shrink-0" />
-                                {surveyorPhone ? (
-                                  <a
-                                    href={`tel:${surveyorPhone.replace(/\s+/g, '')}`}
-                                    className="font-mono font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200 transition-colors"
-                                    title="Bấm để gọi hoặc đối chiếu Zalo"
-                                  >
-                                    {surveyorPhone}
-                                  </a>
-                                ) : (
-                                  <span className="text-[10px] text-stone-400 italic">Chưa cung cấp SĐT/Zalo</span>
-                                )}
-                              </div>
-
-                              <div className="flex items-start gap-1.5 text-[10px] text-stone-600 leading-snug">
-                                <MapPin className="w-3 h-3 text-stone-400 shrink-0 mt-0.5" />
-                                <span>
-                                  {surveyorAddress || <span className="text-stone-400 italic">Chưa có địa chỉ liên hệ</span>}
-                                </span>
-                              </div>
-                            </div>
                           </td>
 
                           {/* Status */}
@@ -673,12 +591,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             {isPending ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
                                 <Clock className="w-3 h-3 text-purple-600" />
-                                Chờ duyệt
+                                Điểm mới (Chờ duyệt)
                               </span>
                             ) : (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 <CheckCircle className="w-3 h-3 text-emerald-600" />
-                                Đã xác nhận
+                                Đã ghi nhận
                               </span>
                             )}
                           </td>
@@ -772,7 +690,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {pendingMonitoringLogs.map(({ plant, log, externalPendingSurvey }) => {
+              {pendingMonitoringLogs.map(({ plant, log }) => {
                 let statusBadge = (
                   <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                     🟢 Báo cáo: Đã ghi nhận
@@ -782,6 +700,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   statusBadge = (
                     <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-stone-100 text-stone-900 border border-stone-300">
                       ⚫ Báo cáo: Biến mất (Lưu trữ điểm đã mất)
+                    </span>
+                  );
+                } else if (log.status === 'new') {
+                  statusBadge = (
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                      🟣 Báo cáo: Điểm mới (Chờ duyệt)
                     </span>
                   );
                 }
@@ -871,7 +795,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleRejectLog(plant.id, log.id, plant.vietnameseName, externalPendingSurvey)}
+                          onClick={() => handleRejectLog(plant.id, log.id, plant.vietnameseName)}
                           className="px-3 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-bold text-xs flex items-center gap-1 transition-colors"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -879,7 +803,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleApproveLog(plant.id, log.id, plant.vietnameseName, externalPendingSurvey)}
+                          onClick={() => handleApproveLog(plant.id, log.id, plant.vietnameseName)}
                           className="px-4 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors"
                         >
                           <Check className="w-4 h-4" />

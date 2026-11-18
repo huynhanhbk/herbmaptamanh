@@ -1,35 +1,141 @@
 {
   "entities": {
     "Plant": {
-      "title": "Cây thuốc & Điểm phân bố",
-      "description": "Danh lục các cây thuốc và tọa độ thực địa xã Tam Anh",
+      "title": "Medicinal Plant Survey Point",
+      "description": "Medicinal plant species and geospatial survey point in Tam Anh commune.",
       "type": "object",
       "properties": {
-        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$", "description": "Mã định danh cây thuốc, ví dụ TA-HERB-001" },
-        "vietnameseName": { "type": "string", "maxLength": 200, "description": "Tên tiếng Việt" },
-        "otherNames": { "type": "array", "description": "Tên gọi dân gian khác" },
-        "scientificName": { "type": "string", "maxLength": 200, "description": "Tên khoa học" },
-        "family": { "type": "string", "maxLength": 200, "description": "Họ thực vật" },
-        "genus": { "type": "string", "maxLength": 200, "description": "Chi thực vật" },
-        "species": { "type": "string", "maxLength": 200, "description": "Loài thực vật" },
-        "coverImage": { "type": "string", "maxLength": 900000, "description": "Ảnh đại diện" },
-        "photos": { "type": "array", "description": "Danh sách hình ảnh thực địa" },
-        "shortDescription": { "type": "string", "maxLength": 3000, "description": "Mô tả ngắn" },
-        "identificationTraits": { "type": "object", "description": "Đặc điểm nhận dạng" },
-        "habitat": { "type": "string", "maxLength": 500, "description": "Sinh cảnh" },
-        "habitatCategory": { "type": "string", "maxLength": 64, "description": "Phân loại sinh cảnh" },
-        "location": { "type": "object", "description": "Tọa độ vĩ độ, kinh độ và địa chỉ" },
-        "conservationStatus": { "type": "string", "enum": ["Đã ghi nhận", "Biến mất", "Điểm mới (Chờ duyệt)"], "description": "Hiện trạng thực địa" },
-        "conservationLevel": { "type": "string", "maxLength": 64, "description": "Mức độ bảo tồn" },
-        "traditionalUses": { "type": "object", "description": "Tri thức dân gian và bài thuốc" },
-        "dataSource": { "type": "object", "description": "Nguồn dữ liệu và thông tin người khảo sát" },
-        "status": { "type": "string", "enum": ["verified", "pending"], "description": "Trạng thái duyệt ('verified' | 'pending')" },
-        "surveyFrequencyCount": { "type": "number", "description": "Tần suất ghi nhận khảo sát" },
-        "occurrenceStatus": { "type": "string", "enum": ["present", "disappeared", "new"], "description": "Hiện trạng tồn tại" },
-        "isDisappeared": { "type": "boolean", "description": "Đã biến mất tại tọa độ này hay chưa" },
-        "monitoringLogs": { "type": "array", "description": "Lịch sử các đợt khảo sát" },
-        "createdAt": { "type": "string", "maxLength": 64, "description": "Thời gian tạo ISO" },
-        "updatedAt": { "type": "string", "maxLength": 64, "description": "Thời gian cập nhật ISO" }
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Unique identifier, e.g. TA-HERB-001 or TA-HERB-001-LOC2"
+        },
+        "vietnameseName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Tên cây thuốc (và tên gọi dân gian)"
+        },
+        "otherNames": {
+          "type": "array",
+          "description": "Các tên gọi dân gian khác (tối đa 20 mục)"
+        },
+        "family": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Họ thực vật"
+        },
+        "genus": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Chi thực vật"
+        },
+        "species": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Loài thực vật"
+        },
+        "scientificName": {
+          "type": "string",
+          "maxLength": 250,
+          "description": "Tên khoa học"
+        },
+        "coverImage": {
+          "type": "string",
+          "maxLength": 450000,
+          "description": "URL hoặc dữ liệu ảnh đại diện đã nén"
+        },
+        "photos": {
+          "type": "array",
+          "description": "Danh sách hình ảnh thực địa (tối đa 20 ảnh)"
+        },
+        "shortDescription": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Mô tả tổng quan"
+        },
+        "identificationTraits": {
+          "type": "object",
+          "description": "Đặc điểm hình thái nhận biết thực vật học"
+        },
+        "habitat": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Mô tả sinh cảnh"
+        },
+        "habitatCategory": {
+          "type": "string",
+          "enum": [
+            "natural_forest",
+            "planted_forest",
+            "shrub_grassland",
+            "sea",
+            "garden",
+            "farmland"
+          ],
+          "description": "Phân loại sinh cảnh (06 nhóm)"
+        },
+        "location": {
+          "type": "object",
+          "description": "Tọa độ GPS (lat, lng), mô tả địa chỉ và thôn (15 thôn)"
+        },
+        "conservationStatus": {
+          "type": "string",
+          "enum": ["Đã ghi nhận", "Biến mất", "Điểm mới (Chờ duyệt)"],
+          "description": "Hiện trạng thực địa chuẩn hóa (03 trạng thái)"
+        },
+        "conservationLevel": {
+          "type": "string",
+          "enum": ["safe", "vulnerable", "endangered"],
+          "description": "Mức độ bảo tồn tương thích nội bộ"
+        },
+        "occurrenceStatus": {
+          "type": "string",
+          "enum": ["present", "safe", "degraded", "disappeared", "new"],
+          "description": "Mã trạng thái hiện diện"
+        },
+        "isDisappeared": {
+          "type": "boolean",
+          "description": "Cờ đánh dấu điểm đã biến mất"
+        },
+        "traditionalUses": {
+          "type": "object",
+          "description": "Tri thức dân gian và bài thuốc lưu truyền"
+        },
+        "dataSource": {
+          "type": "object",
+          "description": "Thông tin nguồn dữ liệu & người khảo sát thực địa"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["verified", "pending"],
+          "description": "Trạng thái kiểm duyệt"
+        },
+        "surveyFrequencyCount": {
+          "type": "number",
+          "description": "Tần suất ghi nhận thực tế"
+        },
+        "trendStatus": {
+          "type": "string",
+          "enum": ["stable", "declining", "increasing"],
+          "description": "Xu hướng biến động"
+        },
+        "monitoringLogs": {
+          "type": "array",
+          "description": "Lịch sử các đợt giám sát thực địa"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Thời điểm tạo bản ghi"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Thời điểm cập nhật bản ghi"
+        }
       },
       "required": [
         "id",
@@ -37,78 +143,27 @@
         "scientificName",
         "family",
         "coverImage",
+        "photos",
         "shortDescription",
+        "identificationTraits",
         "habitat",
         "habitatCategory",
         "location",
         "conservationStatus",
+        "conservationLevel",
         "traditionalUses",
         "dataSource",
         "status",
+        "surveyFrequencyCount",
         "createdAt",
         "updatedAt"
       ]
-    },
-    "SurveyReport": {
-      "title": "Báo cáo giám sát thực địa từ cộng đồng",
-      "description": "Báo cáo đợt kiểm tra thực địa chờ Ban Quản trị phê duyệt",
-      "type": "object",
-      "properties": {
-        "id": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "plantId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
-        "plantName": { "type": "string", "maxLength": 200 },
-        "plantScientificName": { "type": "string", "maxLength": 200 },
-        "date": { "type": "string", "maxLength": 32 },
-        "status": { "type": "string", "enum": ["present", "disappeared"] },
-        "conservationStatus": { "type": "string", "maxLength": 64 },
-        "statusNote": { "type": "string", "maxLength": 2000 },
-        "surveyor": { "type": "string", "maxLength": 200 },
-        "contactPhone": { "type": "string", "maxLength": 40 },
-        "evidencePhoto": { "type": "string", "maxLength": 900000 },
-        "createdAt": { "type": "string", "maxLength": 64 },
-        "approvalStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
-        "submittedByRole": { "type": "string", "enum": ["public", "admin"] }
-      },
-      "required": [
-        "id",
-        "plantId",
-        "date",
-        "status",
-        "statusNote",
-        "surveyor",
-        "createdAt",
-        "approvalStatus",
-        "submittedByRole"
-      ]
-    },
-    "AdminUser": {
-      "title": "Tài khoản Ban Quản trị",
-      "description": "Danh sách UID quản trị viên được phép duyệt và chỉnh sửa CSDL",
-      "type": "object",
-      "properties": {
-        "email": { "type": "string", "maxLength": 200 },
-        "name": { "type": "string", "maxLength": 200 },
-        "active": { "type": "boolean" }
-      },
-      "required": ["email", "active"]
     }
   },
   "firestore": {
     "/plants/{plantId}": {
       "schema": { "$ref": "#/entities/Plant" },
-      "description": "Kho dữ liệu cây thuốc chính thức trên bản đồ; chỉ Quản trị viên có quyền thêm/duyệt/sửa/xóa"
-    },
-    "/pending_surveys/{surveyId}": {
-      "schema": { "$ref": "#/entities/Plant" },
-      "description": "Hàng đợi phiếu khảo sát cây thuốc mới từ cộng đồng (trạng thái pending) chờ Ban Quản trị kiểm duyệt trước khi chuyển sang /plants"
-    },
-    "/surveys/{surveyId}": {
-      "schema": { "$ref": "#/entities/SurveyReport" },
-      "description": "Hàng đợi báo cáo giám sát thực địa cộng đồng ở trạng thái pending chờ Admin xử lý"
-    },
-    "/admins/{adminId}": {
-      "schema": { "$ref": "#/entities/AdminUser" },
-      "description": "Danh sách UID quản trị viên được cấp quyền"
+      "description": "Medicinal plant survey points and monitoring logs."
     }
   }
 }

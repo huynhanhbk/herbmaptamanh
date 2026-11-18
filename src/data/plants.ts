@@ -7,7 +7,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cà quánh', 'Cà vạch', 'Cà gai dây'],
     scientificName: 'Solanum procumbens Lour.',
     family: 'Họ Cà (Solanaceae)',
-    genus: 'Chi Cà (Solanum)',
     coverImage: 'https://images.unsplash.com/photo-1597848212624-a19eb35e2651?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -48,7 +47,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Nấu nước uống giải rượu, thanh nhiệt, hỗ trợ mát gan.',
@@ -80,7 +78,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Vằng sẻ', 'Dây cẩm văn', 'Vằng cước'],
     scientificName: 'Jasminum subtriplinerve Blume',
     family: 'Họ Nhài (Oleaceae)',
-    genus: 'Chi Nhài (Jasminum)',
     coverImage: 'https://images.unsplash.com/photo-1546842931-886c185b4c8c?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -114,7 +111,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Nấu nước uống hàng ngày giúp ăn ngon, tiêu hóa tốt, thanh nhiệt.',
@@ -145,7 +141,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Tiên mao', 'Ngải cau', 'Cồ nốc lan'],
     scientificName: 'Curculigo orchioides Gaertn.',
     family: 'Họ Tỏi voi (Hypoxidaceae)',
-    genus: 'Chi Sâm cau (Curculigo)',
     coverImage: 'https://images.unsplash.com/photo-1509316975850-ff9c5deb0cd9?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -212,7 +207,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Công cộng', 'Khổ đởm thảo', 'Vua vị đắng'],
     scientificName: 'Andrographis paniculata (Burm.f.) Nees',
     family: 'Họ Ô rô (Acanthaceae)',
-    genus: 'Chi Xuyên tâm liên (Andrographis)',
     coverImage: 'https://images.unsplash.com/photo-1515549832467-8783363e19b6?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -240,7 +234,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Dùng khi cảm sốt, ho, viêm họng, đau rát cổ họng do thời tiết.',
@@ -271,7 +264,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Dây muôi', 'Lõa ti rừng'],
     scientificName: 'Gymnema sylvestre (Retz.) R.Br. ex Schult.',
     family: 'Họ La bố ma (Apocynaceae)',
-    genus: 'Chi Dây thìa canh (Gymnema)',
     coverImage: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -330,7 +322,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Ngưu tất nam', 'Bách bội', 'Cỏ ngưu tất'],
     scientificName: 'Achyranthes aspera L.',
     family: 'Họ Rau dền (Amaranthaceae)',
-    genus: 'Chi Cỏ xước (Achyranthes)',
     coverImage: 'https://images.unsplash.com/photo-1508873696983-2df5293cb32b?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -358,7 +349,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Dùng rễ sắc uống hỗ trợ giảm đau mỏi lưng gối, thoái hóa khớp.',
@@ -389,7 +379,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Dây mốc', 'Dây sữa bò', 'Hà thủ ô nam'],
     scientificName: 'Streptocaulon juventas (Lour.) Merr.',
     family: 'Họ Thiên lý (Asclepiadaceae)',
-    genus: 'Chi Hà thủ ô trắng (Streptocaulon)',
     coverImage: 'https://images.unsplash.com/photo-1448375240586-882707db888b?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -450,7 +439,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cỏ lưỡi rắn hoa trắng', 'Bòi ngòi bò'],
     scientificName: 'Hedyotis diffusa Willd.',
     family: 'Họ Cà phê (Rubiaceae)',
-    genus: 'Chi Bạch hoa xà (Hedyotis)',
     coverImage: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -478,7 +466,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Phối hợp với Bán chi liên nấu nước thanh nhiệt tiêu viêm, mát gan lợi mật.',
@@ -509,7 +496,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cây nhãn lồng', 'Chùm bao', 'Hồng tiên'],
     scientificName: 'Passiflora foetida L.',
     family: 'Họ Lạc tiên (Passifloraceae)',
-    genus: 'Chi Lạc tiên (Passiflora)',
     coverImage: 'https://images.unsplash.com/photo-1528183429752-a97d0bf99b5a?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -537,7 +523,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Luộc đọt non ăn như rau hoặc nấu canh giúp dễ ngủ, an thần, giải nhiệt mùa hè.',
@@ -568,7 +553,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cây chân chim', 'Sâm nam', 'Đáng'],
     scientificName: 'Schefflera heptaphylla (L.) Frodin',
     family: 'Họ Cuồng (Araliaceae)',
-    genus: 'Chi Chân chim (Schefflera)',
     coverImage: 'https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -615,7 +599,7 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
       surveyDate: '2026-02-11',
       verifiedBy: 'KS. Lâm nghiệp Đỗ Đức Thắng',
     },
-    status: 'pending',
+    status: 'verified',
     surveyFrequencyCount: 8,
     trendStatus: 'declining',
     createdAt: '2026-02-11T13:45:00Z',
@@ -627,7 +611,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Mã an đằng', 'Cỏ muống biển'],
     scientificName: 'Ipomoea pes-caprae (L.) R. Br.',
     family: 'Họ Bìm bìm (Convolvulaceae)',
-    genus: 'Chi Bìm bìm (Ipomoea)',
     coverImage: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -655,7 +638,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Lá tươi giã nát đắp giải độc vết đốt của sứa biển và côn trùng độc cắn khi đi biển.',
@@ -686,7 +668,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cây thuốc dòi', 'Đại kích biển'],
     scientificName: 'Pouzolzia zeylanica (L.) Benn.',
     family: 'Họ Gai (Urticaceae)',
-    genus: 'Chi Bọ mắm (Pouzolzia)',
     coverImage: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -713,7 +694,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Nấu nước tươi cùng lá thuốc dòi uống hỗ trợ giảm ho đờm, viêm phế quản nhẹ.',
@@ -744,7 +724,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Cây tràm', 'Bạch thiên tầng'],
     scientificName: 'Melaleuca cajuputi Powell',
     family: 'Họ Đào kim nương (Myrtaceae)',
-    genus: 'Chi Tràm (Melaleuca)',
     coverImage: 'https://images.unsplash.com/photo-1542273917363-3b1817f69a2d?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -772,7 +751,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Cất tinh dầu tràm xoa bóp giữ ấm ngực, phòng cảm lạnh cho trẻ nhỏ và sản phụ.',
@@ -803,7 +781,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Nhẫn đông', 'Kim ngân đằng'],
     scientificName: 'Lonicera japonica Thunb.',
     family: 'Họ Kim ngân (Caprifoliaceae)',
-    genus: 'Chi Kim ngân (Lonicera)',
     coverImage: 'https://images.unsplash.com/photo-1596726694676-e8371302826e?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -831,7 +808,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Hãm nụ hoa làm trà uống thanh nhiệt, giải độc cơ thể mùa nóng bức.',
@@ -862,7 +838,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     otherNames: ['Húng trám', 'Cúc nháp', 'Ngổ núi'],
     scientificName: 'Sphagneticola calendulacea (L.) Pruski',
     family: 'Họ Cúc (Asteraceae)',
-    genus: 'Chi Sài đất (Sphagneticola)',
     coverImage: 'https://images.unsplash.com/photo-1597848212624-a19eb35e2651?auto=format&fit=crop&w=800&q=80',
     photos: [
       {
@@ -889,7 +864,6 @@ export const INITIAL_PLANTS_DATA: MedicinalPlant[] = [
     },
     conservationStatus: 'Đã ghi nhận',
     conservationLevel: 'safe',
-    occurrenceStatus: 'present',
     traditionalUses: {
       folkRemedies: [
         'Nấu nước tắm cho trẻ em ngừa mẩn ngứa, rôm sảy mùa hè.',
