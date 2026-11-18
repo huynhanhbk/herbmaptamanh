@@ -32,7 +32,7 @@ import {
   getPlantSpecies
 } from '../types';
 import { getStoredPlants } from '../utils/storage';
-import { compressImageFile, compressBase64Image } from '../utils/imageCompressor';
+import { compressImageFileToLimit, compressBase64ToLimit } from '../utils/imageCompressor';
 
 const DEFAULT_COVER_IMAGE =
   'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
@@ -407,10 +407,7 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
     const processedImages: string[] = [];
     for (const file of selectedFiles) {
       try {
-        let compressed = await compressImageFile(file, 900, 900, 0.68);
-        if (compressed.length > 140000) {
-          compressed = await compressBase64Image(compressed, 720, 720, 0.55, true);
-        }
+        const compressed = await compressImageFileToLimit(file, 115000, 900, 900);
         processedImages.push(compressed);
       } catch {
         const fallbackDataUrl = await new Promise<string>((resolve) => {
@@ -419,7 +416,9 @@ export const SurveyEntryModal: React.FC<SurveyEntryModalProps> = ({
           reader.onerror = () => resolve('');
           reader.readAsDataURL(file);
         });
-        if (fallbackDataUrl) processedImages.push(fallbackDataUrl);
+        if (fallbackDataUrl) {
+          processedImages.push(await compressBase64ToLimit(fallbackDataUrl, 115000, 900));
+        }
       }
     }
 

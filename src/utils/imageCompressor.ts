@@ -105,3 +105,49 @@ export async function compressBase64Image(
     img.src = dataUrl;
   });
 }
+
+export async function compressBase64ToLimit(
+  dataUrl: string,
+  maxChars = 140000,
+  initialMaxDim = 900
+): Promise<string> {
+  if (!dataUrl || !dataUrl.startsWith('data:image') || dataUrl.length <= maxChars) {
+    return dataUrl;
+  }
+
+  const attempts: Array<{ dim: number; quality: number }> = [
+    { dim: initialMaxDim, quality: 0.72 },
+    { dim: Math.min(initialMaxDim, 760), quality: 0.6 },
+    { dim: Math.min(initialMaxDim, 640), quality: 0.5 },
+    { dim: Math.min(initialMaxDim, 520), quality: 0.42 },
+    { dim: 420, quality: 0.35 },
+    { dim: 320, quality: 0.3 },
+  ];
+
+  let current = dataUrl;
+  for (const step of attempts) {
+    const next = await compressBase64Image(current, step.dim, step.dim, step.quality, true);
+    if (next && next.startsWith('data:image') && next.length < current.length) {
+      current = next;
+    }
+    if (current.length <= maxChars) {
+      return current;
+    }
+  }
+
+  return current;
+}
+
+export async function compressImageFileToLimit(
+  file: File,
+  maxChars = 140000,
+  maxWidth = 900,
+  maxHeight = 900
+): Promise<string> {
+  const initial = await compressImageFile(file, maxWidth, maxHeight, 0.75);
+  if (!initial || !initial.startsWith('data:image') || initial.length <= maxChars) {
+    return initial;
+  }
+  return compressBase64ToLimit(initial, maxChars, Math.max(maxWidth, maxHeight));
+}
+

@@ -33,23 +33,80 @@ const BACKUPS_STORAGE_KEY = 'herbmap_tamanh_backups_v1';
 const AUTO_BACKUP_ENABLED_KEY = 'herbmap_tamanh_auto_backup_enabled';
 const DEFAULT_PASSCODE = 'admin2026';
 
+export const DEFAULT_FALLBACK_IMAGE =
+  'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
+
+export function isDefaultFallbackImage(url?: string): boolean {
+  if (!url || !url.trim()) return true;
+  return url.includes('photo-1518531933037-91b2f5f229cc');
+}
+
+const INITIAL_PLANTS_BY_ID = new Map<string, MedicinalPlant>(
+  INITIAL_PLANTS_DATA.map((p) => [p.id, p])
+);
+
 // Active in-memory caches to ensure ultra-fast and complete synchronous access
 let inMemoryPlantsCache: MedicinalPlant[] | null = null;
 let inMemoryBackupsCache: BackupSnapshot[] | null = null;
+let hasHydratedFromIDB = false;
+let loadedFromCompactedLocalStorage = false;
+let idbPlantsHydrationPromise: Promise<MedicinalPlant[] | null> | null = null;
+let idbBackupsHydrationPromise: Promise<BackupSnapshot[] | null> | null = null;
 
-// Background initial load from IndexedDB if available
+export function hasPendingCompactedFallback(): boolean {
+  return loadedFromCompactedLocalStorage && !hasHydratedFromIDB;
+}
+
+export function hydratePlantsFromIndexedDB(): Promise<MedicinalPlant[] | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (!idbPlantsHydrationPromise) {
+    idbPlantsHydrationPromise = idbGetAllPlants()
+      .then((idbPlants) => {
+        hasHydratedFromIDB = true;
+        if (idbPlants && Array.isArray(idbPlants) && idbPlants.length > 0) {
+          const migratedIdb = deduplicatePlants(idbPlants.map(migratePlantRecord));
+          const merged =
+            inMemoryPlantsCache && inMemoryPlantsCache.length > 0
+              ? deduplicatePlants(
+                  loadedFromCompactedLocalStorage
+                    ? [...inMemoryPlantsCache, ...migratedIdb]
+                    : [...migratedIdb, ...inMemoryPlantsCache]
+                )
+              : migratedIdb;
+          inMemoryPlantsCache = merged;
+          loadedFromCompactedLocalStorage = false;
+          return merged;
+        }
+        return null;
+      })
+      .catch(() => {
+        hasHydratedFromIDB = true;
+        return null;
+      });
+  }
+  return idbPlantsHydrationPromise;
+}
+
+export function hydrateBackupsFromIndexedDB(): Promise<BackupSnapshot[] | null> {
+  if (typeof window === 'undefined') return Promise.resolve(null);
+  if (!idbBackupsHydrationPromise) {
+    idbBackupsHydrationPromise = idbGetAllBackups()
+      .then((idbBackups) => {
+        if (idbBackups && Array.isArray(idbBackups) && idbBackups.length > 0) {
+          inMemoryBackupsCache = idbBackups;
+          return idbBackups;
+        }
+        return null;
+      })
+      .catch(() => null);
+  }
+  return idbBackupsHydrationPromise;
+}
+
+// Kick off background IndexedDB hydration at module load
 if (typeof window !== 'undefined') {
-  idbGetAllPlants().then((idbPlants) => {
-    if (idbPlants && Array.isArray(idbPlants) && idbPlants.length > 0) {
-      inMemoryPlantsCache = deduplicatePlants(idbPlants.map(migratePlantRecord));
-    }
-  }).catch(() => {});
-
-  idbGetAllBackups().then((idbBackups) => {
-    if (idbBackups && Array.isArray(idbBackups) && idbBackups.length > 0) {
-      inMemoryBackupsCache = idbBackups;
-    }
-  }).catch(() => {});
+  void hydratePlantsFromIndexedDB();
+  void hydrateBackupsFromIndexedDB();
 }
 
 function migratePlantRecord(p: any): MedicinalPlant {
@@ -189,9 +246,44 @@ function migratePlantRecord(p: any): MedicinalPlant {
     ? p.id.trim().replace(/[^a-zA-Z0-9_-]/g, '-')
     : 'TA-HERB-001';
 
-  return {
+  // Preserve & heal coverImage / photos so real images are never lost to DEFAULT_FALLBACK_IMAGE
+  const rawPhotos = Array.isArray(p.photos) ? p.photos.filter((ph: any) => ph && typeof ph.url === 'string' && ph.url.trim()) : [];
+  let healedCoverImage: string = typeof p.coverImage === 'string' && p.coverImage.trim() ? p.coverImage : '';
+  let healedPhotos = rawPhotos;
+
+  const firstRealPhoto = rawPhotos.find((ph: any) => !isDefaultFallbackImage(ph.url));
+  if (isDefaultFallbackImage(healedCoverImage) && firstRealPhoto) {
+    healedCoverImage = firstRealPhoto.url;
+  }
+
+  // If coverImage was reset to generic fallback for an initial catalog record whose original photo is distinct, restore it
+  if (isDefaultFallbackImage(healedCoverImage)) {
+    const initialMatch = INITIAL_PLANTS_BY_ID.get(safeId);
+    const sameSpeciesName =
+      initialMatch &&
+      String(p.vietnameseName || '').trim().toLowerCase() === initialMatch.vietnameseName.trim().toLowerCase();
+    if (initialMatch && sameSpeciesName && !isDefaultFallbackImage(initialMatch.coverImage)) {
+      healedCoverImage = initialMatch.coverImage;
+      if (healedPhotos.length === 0 || healedPhotos.every((ph: any) => isDefaultFallbackImage(ph.url))) {
+        healedPhotos = initialMatch.photos;
+      }
+    }
+  }
+
+  if (!healedCoverImage) {
+    healedCoverImage = DEFAULT_FALLBACK_IMAGE;
+  }
+
+  const nonDefaultPhotos = healedPhotos.filter((ph: any) => !isDefaultFallbackImage(ph.url));
+  if (nonDefaultPhotos.length > 0) {
+    healedPhotos = nonDefaultPhotos;
+  }
+
+  const cleanedRecord: any = {
     ...p,
     id: safeId,
+    coverImage: healedCoverImage,
+    photos: healedPhotos,
     habitatCategory,
     conservationStatus,
     conservationLevel,
@@ -203,6 +295,8 @@ function migratePlantRecord(p: any): MedicinalPlant {
       communeSection: communeSection as CommuneVillage
     }
   };
+  delete cleanedRecord._compactedForLocalStorage;
+  return cleanedRecord as MedicinalPlant;
 }
 
 export function deduplicatePlants(plants: MedicinalPlant[]): MedicinalPlant[] {
@@ -214,13 +308,27 @@ export function deduplicatePlants(plants: MedicinalPlant[]): MedicinalPlant[] {
     if (!existing) {
       seenMap.set(plant.id, plant);
     } else {
-      // Merge duplicate records intelligently
-      const mergedPhotos = [...(existing.photos || [])];
+      // Merge duplicate records intelligently, never letting DEFAULT_FALLBACK_IMAGE overwrite a real image
+      const mergedPhotosRaw = [...(existing.photos || [])];
       (plant.photos || []).forEach((newPhoto) => {
-        if (!mergedPhotos.some((p) => p.url === newPhoto.url)) {
-          mergedPhotos.push(newPhoto);
+        if (newPhoto?.url && !mergedPhotosRaw.some((p) => p.url === newPhoto.url)) {
+          mergedPhotosRaw.push(newPhoto);
         }
       });
+
+      const nonDefaultPhotos = mergedPhotosRaw.filter((ph) => !isDefaultFallbackImage(ph.url));
+      const mergedPhotos = nonDefaultPhotos.length > 0 ? nonDefaultPhotos : mergedPhotosRaw;
+
+      let preferredCover = plant.coverImage;
+      if (isDefaultFallbackImage(preferredCover)) {
+        if (!isDefaultFallbackImage(existing.coverImage)) {
+          preferredCover = existing.coverImage;
+        } else if (nonDefaultPhotos.length > 0) {
+          preferredCover = nonDefaultPhotos[0].url;
+        } else {
+          preferredCover = plant.coverImage || existing.coverImage || DEFAULT_FALLBACK_IMAGE;
+        }
+      }
 
       const mergedLogs = [...(existing.monitoringLogs || [])];
       (plant.monitoringLogs || []).forEach((newLog) => {
@@ -236,8 +344,8 @@ export function deduplicatePlants(plants: MedicinalPlant[]): MedicinalPlant[] {
         photos: mergedPhotos,
         monitoringLogs: mergedLogs,
         surveyFrequencyCount: Math.max(existing.surveyFrequencyCount || 1, plant.surveyFrequencyCount || 1),
-        coverImage: plant.coverImage || existing.coverImage,
-        updatedAt: new Date().toISOString(),
+        coverImage: preferredCover,
+        updatedAt: plant.updatedAt || existing.updatedAt || new Date().toISOString(),
       };
       seenMap.set(plant.id, merged);
     }
@@ -251,15 +359,18 @@ function createCompactPlantsForLocalStorage(plants: MedicinalPlant[]): Medicinal
     const isLargeBase64 = (url?: string) => Boolean(url && url.startsWith('data:') && url.length > 30000);
     
     let coverImage = p.coverImage;
+    let wasCompacted = false;
     if (isLargeBase64(coverImage)) {
-      coverImage = 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
+      coverImage = DEFAULT_FALLBACK_IMAGE;
+      wasCompacted = true;
     }
 
     const photos = (p.photos || []).map((ph) => {
       if (isLargeBase64(ph.url)) {
+        wasCompacted = true;
         return {
           ...ph,
-          url: 'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80'
+          url: DEFAULT_FALLBACK_IMAGE
         };
       }
       return ph;
@@ -267,17 +378,22 @@ function createCompactPlantsForLocalStorage(plants: MedicinalPlant[]): Medicinal
 
     const monitoringLogs = (p.monitoringLogs || []).map((log) => {
       if (isLargeBase64(log.evidencePhoto)) {
+        wasCompacted = true;
         return { ...log, evidencePhoto: undefined };
       }
       return log;
     });
 
-    return {
+    const compactPlant: any = {
       ...p,
       coverImage,
       photos,
       monitoringLogs
     };
+    if (wasCompacted) {
+      compactPlant._compactedForLocalStorage = true;
+    }
+    return compactPlant as MedicinalPlant;
   });
 }
 
@@ -297,7 +413,6 @@ export function getStoredPlants(): MedicinalPlant[] {
           if (Array.isArray(parsed) && parsed.length > 0) {
             const migrated = deduplicatePlants(parsed.map(migratePlantRecord));
             inMemoryPlantsCache = migrated;
-            idbSaveAllPlants(migrated).catch(() => {});
             try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
             } catch {}
@@ -309,7 +424,6 @@ export function getStoredPlants(): MedicinalPlant[] {
       }
       const deduplicatedInitial = deduplicatePlants(INITIAL_PLANTS_DATA);
       inMemoryPlantsCache = deduplicatedInitial;
-      idbSaveAllPlants(deduplicatedInitial).catch(() => {});
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicatedInitial));
       } catch {}
@@ -318,10 +432,14 @@ export function getStoredPlants(): MedicinalPlant[] {
 
     const parsed = JSON.parse(data);
     if (Array.isArray(parsed)) {
+      if (parsed.some((item: any) => Boolean(item?._compactedForLocalStorage))) {
+        loadedFromCompactedLocalStorage = true;
+      }
       const migrated = parsed.map(migratePlantRecord);
       const deduplicated = deduplicatePlants(migrated);
       inMemoryPlantsCache = deduplicated;
-      idbSaveAllPlants(deduplicated).catch(() => {});
+      // IMPORTANT: Never overwrite IndexedDB here with localStorage data!
+      // IndexedDB holds full-fidelity base64 photos that may exceed localStorage's 5MB quota.
       return deduplicated;
     }
     const fallback = deduplicatePlants(INITIAL_PLANTS_DATA);
@@ -339,6 +457,7 @@ export function savePlants(plants: MedicinalPlant[]): void {
   try {
     const deduplicated = deduplicatePlants(plants);
     inMemoryPlantsCache = deduplicated;
+    loadedFromCompactedLocalStorage = false;
     
     // 1. Asynchronously persist full-fidelity data into IndexedDB (virtually unlimited capacity)
     idbSaveAllPlants(deduplicated).catch((err) => {
@@ -355,12 +474,16 @@ export function savePlants(plants: MedicinalPlant[]): void {
         localStorage.removeItem(BACKUPS_STORAGE_KEY);
       } catch {}
 
-      // Save compact version without heavy base64 strings in localStorage
       try {
-        const compact = createCompactPlantsForLocalStorage(deduplicated);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
-      } catch (secondaryErr) {
-        console.warn('LocalStorage compact save skipped, persisted safely in IndexedDB and memory.', secondaryErr);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(deduplicated));
+      } catch {
+        // Save compact fallback in localStorage ONLY; full-fidelity images remain in memory, IndexedDB, and Firestore
+        try {
+          const compact = createCompactPlantsForLocalStorage(deduplicated);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(compact));
+        } catch (secondaryErr) {
+          console.warn('LocalStorage compact save skipped, persisted safely in IndexedDB and memory.', secondaryErr);
+        }
       }
     }
   } catch (err) {
@@ -1086,9 +1209,10 @@ export function updatePlant(id: string, updates: Partial<MedicinalPlant>): Medic
 }
 
 export function resetToDefaultData(): MedicinalPlant[] {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_PLANTS_DATA));
-  batchSavePlantsToFirestore(INITIAL_PLANTS_DATA);
-  return INITIAL_PLANTS_DATA;
+  const initialCopy = deduplicatePlants(INITIAL_PLANTS_DATA.map(migratePlantRecord));
+  savePlants(initialCopy);
+  void batchSavePlantsToFirestore(initialCopy);
+  return initialCopy;
 }
 
 export function verifyAdminPasscode(inputCode: string): boolean {
@@ -1635,38 +1759,21 @@ export function saveBackupsList(backups: BackupSnapshot[]): void {
       console.warn('IndexedDB saveBackups warning:', err);
     });
 
-    // 2. In localStorage, store only slim headers (no massive plants array duplication)
-    const slimList = sorted.map((b) => ({
+    // 2. In localStorage, store only lightweight headers (never compacted fake-image plant arrays)
+    const minimalList = sorted.map((b) => ({
       id: b.id,
       timestamp: b.timestamp,
       date: b.date,
       timeString: b.timeString,
       plantCount: b.plantCount,
-      plants: b.plants && b.plants.length > 0 ? createCompactPlantsForLocalStorage(b.plants) : [],
+      plants: [],
       type: b.type,
       note: b.note,
       sizeKb: b.sizeKb
     }));
-
     try {
-      localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(slimList));
-    } catch (quotaErr) {
-      console.warn('LocalStorage quota limit reached on backups. Storing zero-payload headers in localStorage.');
-      const minimalList = sorted.map((b) => ({
-        id: b.id,
-        timestamp: b.timestamp,
-        date: b.date,
-        timeString: b.timeString,
-        plantCount: b.plantCount,
-        plants: [],
-        type: b.type,
-        note: b.note,
-        sizeKb: b.sizeKb
-      }));
-      try {
-        localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(minimalList));
-      } catch {}
-    }
+      localStorage.setItem(BACKUPS_STORAGE_KEY, JSON.stringify(minimalList));
+    } catch {}
   } catch (err) {
     console.error('Error saving backup list:', err);
   }

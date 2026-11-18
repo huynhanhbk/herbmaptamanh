@@ -8,7 +8,7 @@ import {
   getPlantGenus,
   getPlantSpecies
 } from '../types';
-import { compressImageFile } from '../utils/imageCompressor';
+import { compressImageFileToLimit, compressBase64ToLimit } from '../utils/imageCompressor';
 import { HerbMapLogo } from './HerbMapLogo';
 import { 
   X, 
@@ -120,12 +120,13 @@ export const SpeciesDetailModal: React.FC<SpeciesDetailModalProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const compressed = await compressImageFile(file, 1000, 1000, 0.75);
+      const compressed = await compressImageFileToLimit(file, 150000, 900, 900);
       setNewLogPhoto(compressed);
     } catch {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        setNewLogPhoto(ev.target?.result as string);
+      reader.onload = async (ev) => {
+        const raw = (ev.target?.result as string) || '';
+        setNewLogPhoto(raw ? await compressBase64ToLimit(raw, 150000, 900) : '');
       };
       reader.readAsDataURL(file);
     }

@@ -25,7 +25,8 @@ import {
   deleteBackup, 
   isAutoBackupEnabled, 
   setAutoBackupEnabled,
-  getStoredPlants
+  getStoredPlants,
+  hydrateBackupsFromIndexedDB
 } from '../utils/storage';
 
 interface BackupManagerModalProps {
@@ -54,6 +55,11 @@ export const BackupManagerModal: React.FC<BackupManagerModalProps> = ({
   const loadBackupData = () => {
     setBackups(getDailyBackups());
     setAutoBackupActive(isAutoBackupEnabled());
+    void hydrateBackupsFromIndexedDB().then((idbBackups) => {
+      if (idbBackups && idbBackups.length > 0) {
+        setBackups(idbBackups);
+      }
+    });
   };
 
   if (!isOpen) return null;

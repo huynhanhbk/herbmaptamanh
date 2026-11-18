@@ -12,11 +12,17 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { MedicinalPlant, getConservationStatusLabel, getPlantSurveyStatus } from '../types';
-import { getStoredPlants, savePlants, deduplicatePlants } from '../utils/storage';
+import {
+  DEFAULT_FALLBACK_IMAGE,
+  isDefaultFallbackImage,
+  hydratePlantsFromIndexedDB,
+  getStoredPlants,
+  savePlants,
+  deduplicatePlants,
+} from '../utils/storage';
+import { compressBase64ToLimit } from '../utils/imageCompressor';
 
 const COLLECTION_NAME = 'plants';
-const DEFAULT_FALLBACK_IMAGE =
-  'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=800&q=80';
 
 function sanitizeDocumentId(rawId: string): string {
   return (rawId || 'TA-HERB-UNKNOWN').replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 128);
@@ -27,9 +33,10 @@ function clampString(val: unknown, maxLen: number, fallback = ''): string {
   return s.length > maxLen ? s.slice(0, maxLen) : s;
 }
 
-function clampImageString(val: unknown): string {
+function sanitizeImageString(val: unknown): string {
   const s = typeof val === 'string' && val.trim() ? val.trim() : DEFAULT_FALLBACK_IMAGE;
-  return s.length > 440000 ? DEFAULT_FALLBACK_IMAGE : s;
+  // Firestore rule allows coverImage <= 450000; prepareFirestorePlantPayload compresses oversized images beforehand.
+  return s.length <= 445000 ? s : DEFAULT_FALLBACK_IMAGE;
 }
 
 function removeUndefinedDeep<T>(obj: T): T {
@@ -83,7 +90,7 @@ function buildFirestorePlantPayload(plant: MedicinalPlant): Record<string, unkno
     .slice(0, 20)
     .map((ph, idx) => ({
       id: clampString(ph?.id, 128, `photo-${idx}`),
-      url: clampImageString(ph?.url),
+      url: sanitizeImageString(ph?.url),
       caption: clampString(ph?.caption, 300, plant.vietnameseName || 'Mẫu thực địa'),
       type: ['whole', 'leaf', 'flower', 'fruit', 'root'].includes(ph?.type) ? ph.type : 'whole',
     }));
@@ -190,7 +197,7 @@ function buildFirestorePlantPayload(plant: MedicinalPlant): Record<string, unkno
     otherNames: cleanOtherNames,
     scientificName: clampString(plant.scientificName, 250, 'Đang xác minh phân loại học'),
     family: clampString(plant.family, 200, 'Chưa phân loại'),
-    coverImage: clampImageString(plant.coverImage),
+    coverImage: sanitizeImageString(plant.coverImage),
     photos: sanitizedPhotos,
     shortDescription: clampString(plant.shortDescription, 2000, ''),
     identificationTraits: cleanTraits,
@@ -230,11 +237,75 @@ function buildFirestorePlantPayload(plant: MedicinalPlant): Record<string, unkno
   return removeUndefinedDeep(payload);
 }
 
+async function prepareFirestorePlantPayload(plant: MedicinalPlant): Promise<Record<string, unknown>> {
+  const photosInput = Array.isArray(plant.photos) ? plant.photos : [];
+  let coverInput = plant.coverImage;
+  if (isDefaultFallbackImage(coverInput)) {
+    const firstReal = photosInput.find((ph) => ph?.url && !isDefaultFallbackImage(ph.url));
+    if (firstReal) {
+      coverInput = firstReal.url;
+    }
+  }
+
+  const compressWithBudget = async (perImageLimit: number): Promise<MedicinalPlant> => {
+    const compressedCover =
+      coverInput && coverInput.startsWith('data:image') && coverInput.length > perImageLimit
+        ? await compressBase64ToLimit(coverInput, perImageLimit, 900)
+        : coverInput;
+
+    const compressedPhotos = await Promise.all(
+      photosInput.slice(0, 20).map(async (ph) => {
+        if (ph?.url && ph.url.startsWith('data:image') && ph.url.length > perImageLimit) {
+          return {
+            ...ph,
+            url: await compressBase64ToLimit(ph.url, perImageLimit, 900),
+          };
+        }
+        return ph;
+      })
+    );
+
+    const compressedLogs = await Promise.all(
+      (Array.isArray(plant.monitoringLogs) ? plant.monitoringLogs : []).map(async (log) => {
+        if (log?.evidencePhoto && log.evidencePhoto.startsWith('data:image') && log.evidencePhoto.length > perImageLimit) {
+          return {
+            ...log,
+            evidencePhoto: await compressBase64ToLimit(log.evidencePhoto, perImageLimit, 800),
+          };
+        }
+        return log;
+      })
+    );
+
+    return {
+      ...plant,
+      coverImage: compressedCover,
+      photos: compressedPhotos,
+      monitoringLogs: compressedLogs,
+    };
+  };
+
+  // First pass: ensure every image is comfortably below Firestore's 450KB field limit
+  let preparedPlant = await compressWithBudget(150000);
+  let payload = buildFirestorePlantPayload(preparedPlant);
+
+  // If total document exceeds Firestore's 1 MiB limit (e.g. 5+ photos + coverImage + evidencePhoto), tighten per-image budget
+  const budgets = [95000, 65000, 45000];
+  for (const budget of budgets) {
+    if (JSON.stringify(payload).length <= 900000) break;
+    preparedPlant = await compressWithBudget(budget);
+    payload = buildFirestorePlantPayload(preparedPlant);
+  }
+
+  return payload;
+}
+
 /**
  * Seeds initial plants to Firestore if the collection is empty.
  */
 export async function syncInitialPlantsToFirestore(): Promise<void> {
   try {
+    await hydratePlantsFromIndexedDB();
     const colRef = collection(db, COLLECTION_NAME);
     const q = query(colRef, where('status', 'in', ['verified', 'pending']));
     const snapshot = await getDocs(q);
@@ -256,7 +327,7 @@ export async function savePlantToFirestore(plant: MedicinalPlant): Promise<void>
   try {
     const safeId = sanitizeDocumentId(plant.id);
     const docRef = doc(db, COLLECTION_NAME, safeId);
-    const payload = buildFirestorePlantPayload({ ...plant, id: safeId });
+    const payload = await prepareFirestorePlantPayload({ ...plant, id: safeId });
     await setDoc(docRef, payload);
   } catch (err) {
     console.error('Error saving plant to Firestore:', err);
@@ -285,11 +356,17 @@ export async function batchSavePlantsToFirestore(plants: MedicinalPlant[]): Prom
     for (let i = 0; i < plants.length; i += chunkSize) {
       const chunk = plants.slice(i, i + chunkSize);
       const batch = writeBatch(db);
-      chunk.forEach((plant) => {
-        if (!plant?.id) return;
-        const safeId = sanitizeDocumentId(plant.id);
+      const preparedPayloads = await Promise.all(
+        chunk
+          .filter((plant) => Boolean(plant?.id))
+          .map(async (plant) => {
+            const safeId = sanitizeDocumentId(plant.id);
+            const payload = await prepareFirestorePlantPayload({ ...plant, id: safeId });
+            return { safeId, payload };
+          })
+      );
+      preparedPayloads.forEach(({ safeId, payload }) => {
         const docRef = doc(db, COLLECTION_NAME, safeId);
-        const payload = buildFirestorePlantPayload({ ...plant, id: safeId });
         batch.set(docRef, payload);
       });
       await batch.commit();
@@ -310,14 +387,39 @@ export function subscribeToPlantsRealtime(
 
   return onSnapshot(
     plantsQuery,
-    (snapshot) => {
+    async (snapshot) => {
+      await hydratePlantsFromIndexedDB();
       if (snapshot.empty) {
         callback(getStoredPlants());
         return;
       }
+      const localPlants = getStoredPlants();
+      const localById = new Map(localPlants.map((p) => [p.id, p]));
+
       const cloudPlants: MedicinalPlant[] = [];
       snapshot.forEach((docSnap) => {
-        cloudPlants.push(hydratePlantFromSnapshot(docSnap.id, docSnap.data()));
+        const hydrated = hydratePlantFromSnapshot(docSnap.id, docSnap.data());
+        if (isDefaultFallbackImage(hydrated.coverImage) && Array.isArray(hydrated.photos)) {
+          const firstRealCloudPhoto = hydrated.photos.find((ph) => ph?.url && !isDefaultFallbackImage(ph.url));
+          if (firstRealCloudPhoto) {
+            hydrated.coverImage = firstRealCloudPhoto.url;
+          }
+        }
+        const localMatch = localById.get(hydrated.id);
+        if (localMatch) {
+          const cloudHasDefaultCover = isDefaultFallbackImage(hydrated.coverImage);
+          const localHasRealCover = !isDefaultFallbackImage(localMatch.coverImage);
+          const cloudHasRealPhotos = (hydrated.photos || []).some((ph) => !isDefaultFallbackImage(ph.url));
+          const localHasRealPhotos = (localMatch.photos || []).some((ph) => !isDefaultFallbackImage(ph.url));
+
+          if (cloudHasDefaultCover && localHasRealCover) {
+            hydrated.coverImage = localMatch.coverImage;
+          }
+          if (!cloudHasRealPhotos && localHasRealPhotos) {
+            hydrated.photos = localMatch.photos;
+          }
+        }
+        cloudPlants.push(hydrated);
       });
       const deduplicated = deduplicatePlants(cloudPlants);
       savePlants(deduplicated);

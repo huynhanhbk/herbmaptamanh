@@ -29,7 +29,7 @@ import {
   getPlantGenus,
   getPlantSpecies
 } from '../types';
-import { compressImageFile } from '../utils/imageCompressor';
+import { compressImageFileToLimit, compressBase64ToLimit } from '../utils/imageCompressor';
 
 interface EditPlantModalProps {
   plant: MedicinalPlant | null;
@@ -159,12 +159,13 @@ export const EditPlantModal: React.FC<EditPlantModalProps> = ({
     if (!file) return;
 
     try {
-      const compressed = await compressImageFile(file, 1000, 1000, 0.78);
+      const compressed = await compressImageFileToLimit(file, 180000, 1000, 1000);
       setCoverImage(compressed);
     } catch {
       const reader = new FileReader();
-      reader.onload = () => {
-        setCoverImage(reader.result as string);
+      reader.onload = async () => {
+        const raw = (reader.result as string) || '';
+        setCoverImage(raw ? await compressBase64ToLimit(raw, 180000, 1000) : '');
       };
       reader.readAsDataURL(file);
     }

@@ -12,6 +12,8 @@ import { AboutProjectModal } from './components/AboutProjectModal';
 import { MedicinalPlant, AICandidate, PlantMonitoringLog } from './types';
 import { 
   getStoredPlants, 
+  hydratePlantsFromIndexedDB,
+  hydrateBackupsFromIndexedDB,
   saveNewPlant, 
   verifyAdminPasscode, 
   checkAndRunDailyAutoBackup, 
@@ -58,14 +60,36 @@ export function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load plants on mount, sync with cloud Firestore in real-time, and trigger auto backup check
+  // Load plants on mount, hydrate full-fidelity IndexedDB images, sync with cloud Firestore in real-time, and trigger auto backup check
   useEffect(() => {
+    let isMounted = true;
     const loaded = getStoredPlants();
     setPlants(loaded);
+
+    // Hydrate full-fidelity photos from IndexedDB before auto-backup or initial Firestore seed
+    Promise.all([hydratePlantsFromIndexedDB(), hydrateBackupsFromIndexedDB()])
+      .then(([idbPlants]) => {
+        if (!isMounted) return;
+        if (idbPlants && idbPlants.length > 0) {
+          setPlants(idbPlants);
+          setSelectedPlant((prev) => {
+            if (!prev) return null;
+            const updated = idbPlants.find((p) => p.id === prev.id);
+            return updated || prev;
+          });
+        }
+        try {
+          checkAndRunDailyAutoBackup();
+        } catch (e) {
+          console.warn('Auto backup check:', e);
+        }
+      })
+      .catch(() => {});
 
     // Initial seed & realtime sync from Cloud Firestore
     syncInitialPlantsToFirestore().catch((e) => console.warn('Firestore initial sync check:', e));
     const unsubscribe = subscribeToPlantsRealtime((cloudPlants) => {
+      if (!isMounted) return;
       setPlants(cloudPlants);
       setSelectedPlant((prev) => {
         if (!prev) return null;
@@ -73,13 +97,6 @@ export function App() {
         return updated || prev;
       });
     });
-
-    // Run automatic daily backup snapshot check
-    try {
-      checkAndRunDailyAutoBackup();
-    } catch (e) {
-      console.warn('Auto backup check:', e);
-    }
 
     // Check URL parameters for direct plant link (e.g. ?speciesId=TA-HERB-001)
     if (typeof window !== 'undefined') {
@@ -99,6 +116,7 @@ export function App() {
     }
 
     return () => {
+      isMounted = false;
       unsubscribe();
     };
   }, []);
