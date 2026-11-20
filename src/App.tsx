@@ -31,7 +31,8 @@ import { Lock, CheckCircle, X } from 'lucide-react';
 export function App() {
   const [plants, setPlants] = useState<MedicinalPlant[]>([]);
   const [activeTab, setActiveTab] = useState<'map' | 'catalog' | 'dashboard' | 'admin'>('map');
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [headerSearchQuery, setHeaderSearchQuery] = useState<string>('');
+  const [catalogSearchQuery, setCatalogSearchQuery] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [adminPassInput, setAdminPassInput] = useState<string>('');
@@ -264,8 +265,12 @@ export function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
+        searchQuery={headerSearchQuery}
+        setSearchQuery={setHeaderSearchQuery}
+        onViewResultsInCatalog={(query) => {
+          setCatalogSearchQuery(query);
+          setActiveTab('catalog');
+        }}
         onOpenAIScanner={() => setIsAIScannerOpen(true)}
         onOpenQRScanner={() => setIsQRScannerOpen(true)}
         onOpenNewSurvey={() => {
@@ -307,8 +312,8 @@ export function App() {
             plants={plants}
             onSelectPlant={handleSelectPlant}
             onLocateOnMap={handleLocateOnMap}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
+            searchQuery={catalogSearchQuery}
+            setSearchQuery={setCatalogSearchQuery}
             onOpenAIScanner={() => setIsAIScannerOpen(true)}
           />
         )}

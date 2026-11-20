@@ -38,6 +38,7 @@ interface HeaderProps {
   pendingCount: number;
   plants?: MedicinalPlant[];
   onSelectPlant?: (plant: MedicinalPlant) => void;
+  onViewResultsInCatalog?: (query: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -56,6 +57,7 @@ export const Header: React.FC<HeaderProps> = ({
   pendingCount,
   plants = [],
   onSelectPlant,
+  onViewResultsInCatalog,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSearchOpenMobile, setIsSearchOpenMobile] = useState(false);
@@ -87,7 +89,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleViewAllInCatalog = () => {
     setIsSearchFocused(false);
     setIsSearchOpenMobile(false);
-    setActiveTab('catalog');
+    if (onViewResultsInCatalog) {
+      onViewResultsInCatalog(searchQuery);
+    } else {
+      setActiveTab('catalog');
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {

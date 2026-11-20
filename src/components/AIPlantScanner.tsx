@@ -206,8 +206,6 @@ export const AIPlantScanner: React.FC<AIPlantScannerProps> = ({
             <div>
               <h2 className="text-base font-bold flex items-center gap-1.5">
                 Nhận Diện Thực Vật Bằng AI
-                <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-700/60">
-                </span>
               </h2>
               <p className="text-xs text-emerald-200/80">
                 Chụp ảnh lá, hoa, quả hoặc toàn thân cây để nhận diện sơ bộ

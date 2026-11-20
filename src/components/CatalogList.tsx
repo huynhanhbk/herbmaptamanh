@@ -29,7 +29,7 @@ import {
   Wheat,
   Trees
 } from 'lucide-react';
-import { matchPlantSearch } from '../utils/searchHelper';
+import { searchPlants } from '../utils/searchHelper';
 
 interface CatalogListProps {
   plants: MedicinalPlant[];
@@ -62,19 +62,12 @@ export const CatalogList: React.FC<CatalogListProps> = ({
     };
   }, [plants]);
 
-  // Filtered plants
+  // Filtered and relevance-ranked plants
   const filteredPlants = useMemo(() => {
-    return plants.filter((plant) => {
+    const baseFiltered = plants.filter((plant) => {
       const statusMeta = getPlantSurveyStatus(plant);
 
-      // Smart exact & approximate search query filter
-      if (searchQuery.trim()) {
-        if (!matchPlantSearch(plant, searchQuery)) {
-          return false;
-        }
-      }
-
-      // 04 field survey statuses filter
+      // 03 field survey statuses filter
       if (selectedOccurrence !== 'all' && statusMeta.key !== selectedOccurrence) {
         return false;
       }
@@ -91,6 +84,12 @@ export const CatalogList: React.FC<CatalogListProps> = ({
 
       return true;
     });
+
+    if (searchQuery.trim()) {
+      return searchPlants(baseFiltered, searchQuery);
+    }
+
+    return baseFiltered;
   }, [plants, searchQuery, selectedOccurrence, selectedHabitat, selectedCommune]);
 
   return (
@@ -101,9 +100,6 @@ export const CatalogList: React.FC<CatalogListProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-800/80 text-emerald-200 border border-emerald-600/50">
               Cơ sở dữ liệu không gian
-            </span>
-            <span className="text-xs text-stone-300">
-              {filteredPlants.length} / {plants.length} loài cây thuốc
             </span>
           </div>
 

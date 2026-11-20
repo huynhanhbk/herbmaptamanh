@@ -37,9 +37,6 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold">Về Đề Tài HerbMap Tam Anh</h2>
-              <p className="text-xs text-emerald-200/80">
-                Ý tưởng Khoa học Kỹ thuật — Chuyển đổi số & Bảo tồn dược liệu
-              </p>
             </div>
           </div>
 
@@ -97,7 +94,7 @@ export const AboutProjectModal: React.FC<AboutProjectModalProps> = ({
         {/* Footer */}
         <div className="bg-stone-50 px-6 py-3.5 border-t border-stone-200 flex items-center justify-between">
           <span className="text-[11px] text-stone-500 font-medium">
-            HerbMap Tam Anh — Thực hiện bởi cô Lê Thị Như - Trường THCS Nguyễn Khuyến
+            HerbMap Tam Anh — Thực hiện bởi: Trâm Anh - Ngọc Sâm, GVHD: cô Lê Thị Như - Trường THCS Nguyễn Khuyến
           </span>
           <button
             onClick={onClose}

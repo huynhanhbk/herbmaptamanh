@@ -186,9 +186,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div>
             <span className="text-xs font-semibold text-stone-500 block">Điểm đã biến mất</span>
             <span className="text-xl sm:text-2xl font-bold text-rose-700">{disappearedCount}</span>
-            <span className="text-[11px] text-rose-600 font-medium block">
-              Đã ghi nhận: {recordedCount} điểm
-            </span>
           </div>
         </div>
 
@@ -428,26 +425,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       <div className="bg-emerald-900 text-white p-6 rounded-3xl shadow-xl space-y-3">
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-amber-300" />
-          <h3 className="font-bold text-base">Giải Pháp Giáo Dục STEM & Bảo Tồn Thực Địa Cấp Xã</h3>
+          <h3 className="font-bold text-base">Giải Pháp Giáo Dục STEM</h3>
         </div>
-        <p className="text-xs text-emerald-100 leading-relaxed max-w-3xl">
-          Đề tài ứng dụng HerbMap Tam Anh đề xuất mô hình <b>Vườn Thực Nghiệm Dược Liệu Học Đường</b> tại trường THCS Nguyễn Khuyến và Trạm Y tế xã:
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-xs">
           <div className="bg-emerald-950/60 p-3.5 rounded-2xl border border-emerald-700/60 space-y-1">
-            <span className="font-bold text-amber-300 block">1. Nhân giống bảo tồn ngoại vi (Ex-situ)</span>
-            <p className="text-emerald-200/90 text-[11px]">
-              Đưa các loài nguy cấp (Sâm cau rừng, Hà thủ ô trắng) về vườn trường để giâm cành, ươm hạt bảo tồn.
-            </p>
-          </div>
-          <div className="bg-emerald-950/60 p-3.5 rounded-2xl border border-emerald-700/60 space-y-1">
-            <span className="font-bold text-amber-300 block">2. Gắn biển QR thông minh ngoài tự nhiên</span>
+            <span className="font-bold text-amber-300 block">1. Gắn biển QR thông minh ngoài tự nhiên</span>
             <p className="text-emerald-200/90 text-[11px]">
               Gắn thẻ biển báo mã QR chống nước tại các điểm bờ rào nương đồi để người dân tra cứu, tránh chặt phá nhầm.
             </p>
           </div>
           <div className="bg-emerald-950/60 p-3.5 rounded-2xl border border-emerald-700/60 space-y-1">
-            <span className="font-bold text-amber-300 block">3. Trải nghiệm học tập STEM Sinh - Hóa</span>
+            <span className="font-bold text-amber-300 block">2. Trải nghiệm học tập STEM Sinh - Hóa</span>
             <p className="text-emerald-200/90 text-[11px]">
               Học sinh dùng điện thoại khảo sát, phân tích và cập nhật bản đồ số.
             </p>

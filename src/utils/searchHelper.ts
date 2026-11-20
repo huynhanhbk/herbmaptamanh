@@ -1,128 +1,419 @@
-import { MedicinalPlant } from '../types';
+import { MedicinalPlant, getHabitatLabel } from '../types';
+
+const WORD_SPLIT_REGEX = /[\s,;.:/()[\]{}"'!?+-]+/;
 
 /**
- * Removes Vietnamese accents/diacritics and normalizes string for fuzzy/unaccented searching.
+ * Normalizes Vietnamese text in NFC lowercase while keeping diacritics intact.
+ */
+function normalizeVietnameseAccented(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFC')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Removes Vietnamese accents/diacritics and normalizes string for accent-insensitive searching.
  * Example: "Cà gai leo" -> "ca gai leo", "Đức Bố" -> "duc bo"
  */
 export function removeVietnameseTones(str: string): string {
   if (!str) return '';
-  let clean = str.toLowerCase();
-  clean = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  // replace specific Vietnamese characters like đ
-  clean = clean.replace(/[đĐ]/g, 'd');
-  // clean up extra whitespaces
-  return clean.trim();
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+interface ParsedQuery {
+  rawTrimmed: string;
+  rawAccented: string;
+  normFull: string;
+  rawTokens: string[];
+  normTokens: string[];
+  tokenHasDiacritics: boolean[];
+  queryHasDiacritics: boolean;
+}
+
+function parseQuery(query: string): ParsedQuery | null {
+  if (!query || !query.trim()) return null;
+
+  const rawTrimmed = query.trim().toLowerCase().normalize('NFC');
+  const rawAccented = normalizeVietnameseAccented(query);
+  const normFull = removeVietnameseTones(query);
+
+  const rawTokens = rawAccented.split(WORD_SPLIT_REGEX).filter(Boolean);
+  const normTokens = rawTokens.map((t) => removeVietnameseTones(t)).filter(Boolean);
+
+  if (normTokens.length === 0) return null;
+
+  const tokenHasDiacritics = rawTokens.map((t, idx) => t !== normTokens[idx]);
+  const queryHasDiacritics = tokenHasDiacritics.some(Boolean);
+
+  return {
+    rawTrimmed,
+    rawAccented,
+    normFull,
+    rawTokens,
+    normTokens,
+    tokenHasDiacritics,
+    queryHasDiacritics,
+  };
+}
+
+interface FieldTokens {
+  accWords: string[];
+  normWords: string[];
+  accJoined: string;
+  normJoined: string;
+}
+
+function tokenizeField(value?: string): FieldTokens | null {
+  if (!value || !value.trim()) return null;
+  const accWords = normalizeVietnameseAccented(value).split(WORD_SPLIT_REGEX).filter(Boolean);
+  if (accWords.length === 0) return null;
+  const normWords = accWords.map((w) => removeVietnameseTones(w));
+  return {
+    accWords,
+    normWords,
+    accJoined: accWords.join(' '),
+    normJoined: normWords.join(' '),
+  };
+}
+
+function matchSingleToken(
+  accWord: string,
+  normWord: string,
+  rawTok: string,
+  normTok: string,
+  hasDiacritic: boolean,
+  allowPrefix: boolean
+): 'exact_accented' | 'exact_norm' | 'prefix_accented' | 'prefix_norm' | null {
+  if (hasDiacritic) {
+    if (accWord === rawTok) return 'exact_accented';
+    if (allowPrefix && accWord.startsWith(rawTok)) return 'prefix_accented';
+    return null;
+  }
+
+  if (accWord === rawTok) return 'exact_accented';
+  if (normWord === normTok) return 'exact_norm';
+  if (allowPrefix && normWord.startsWith(normTok)) return 'prefix_norm';
+  return null;
 }
 
 /**
- * Checks if a plant matches the search query accurately or approximately.
- * Supports:
- * - Exact / substring match
- * - Accent-insensitive Vietnamese matching
- * - Multi-token search (all query terms present in any combination of fields)
- * - Searching by Vietnamese name, other names, scientific name, family, remedy, part used, preparation, habitat, location, and ID.
+ * Scores how well a single text field matches the parsed query.
+ * Returns 0 if no match; higher numbers indicate stronger relevance.
+ */
+function scoreFieldMatch(
+  value: string | undefined,
+  parsed: ParsedQuery,
+  baseWeight: number,
+  options: {
+    allowPrefixOnLastToken: boolean;
+    allowPrefixOnLongTokens?: boolean;
+    allowUnorderedTokens: boolean;
+    minQueryLength?: number;
+  }
+): number {
+  if (options.minQueryLength && parsed.normFull.length < options.minQueryLength) {
+    return 0;
+  }
+
+  const field = tokenizeField(value);
+  if (!field) return 0;
+
+  const { rawTokens, normTokens, tokenHasDiacritics, queryHasDiacritics } = parsed;
+  const tokenCount = normTokens.length;
+  const queryAccJoined = rawTokens.join(' ');
+  const queryNormJoined = normTokens.join(' ');
+
+  // 1. Exact full field match
+  if (field.accJoined === queryAccJoined) {
+    return baseWeight + 300;
+  }
+  if (!queryHasDiacritics && field.normJoined === queryNormJoined) {
+    return baseWeight + 260;
+  }
+
+  // 2. Contiguous phrase match at word boundaries (start of field or anywhere in field)
+  if (field.accWords.length >= tokenCount) {
+    for (let start = 0; start <= field.accWords.length - tokenCount; start++) {
+      let matched = true;
+      let accentedHits = 0;
+      let exactHits = 0;
+
+      for (let i = 0; i < tokenCount; i++) {
+        const isLast = i === tokenCount - 1;
+        const allowPrefix =
+          (isLast && options.allowPrefixOnLastToken) ||
+          Boolean(options.allowPrefixOnLongTokens && normTokens[i].length >= 4);
+
+        const res = matchSingleToken(
+          field.accWords[start + i],
+          field.normWords[start + i],
+          rawTokens[i],
+          normTokens[i],
+          tokenHasDiacritics[i],
+          allowPrefix
+        );
+
+        if (!res) {
+          matched = false;
+          break;
+        }
+        if (res === 'exact_accented' || res === 'prefix_accented') accentedHits++;
+        if (res === 'exact_accented' || res === 'exact_norm') exactHits++;
+      }
+
+      if (matched) {
+        const startBonus = start === 0 ? 180 : 110;
+        const exactBonus = exactHits === tokenCount ? 40 : 0;
+        const accentBonus = Math.round((accentedHits / tokenCount) * 30);
+        return baseWeight + startBonus + exactBonus + accentBonus;
+      }
+    }
+  }
+
+  // 3. Unordered multi-token match within the SAME field (all tokens present as distinct words)
+  if (options.allowUnorderedTokens && tokenCount > 1) {
+    let accentedHits = 0;
+    const allMatched = normTokens.every((normTok, i) => {
+      const isLast = i === tokenCount - 1;
+      const allowPrefix =
+        (isLast && options.allowPrefixOnLastToken) ||
+        Boolean(options.allowPrefixOnLongTokens && normTok.length >= 4);
+
+      for (let w = 0; w < field.accWords.length; w++) {
+        const res = matchSingleToken(
+          field.accWords[w],
+          field.normWords[w],
+          rawTokens[i],
+          normTok,
+          tokenHasDiacritics[i],
+          allowPrefix
+        );
+        if (res) {
+          if (res === 'exact_accented' || res === 'prefix_accented') accentedHits++;
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (allMatched) {
+      const accentBonus = Math.round((accentedHits / tokenCount) * 20);
+      return baseWeight + 50 + accentBonus;
+    }
+  }
+
+  return 0;
+}
+
+function scorePlantIdMatch(plantId: string | undefined, parsed: ParsedQuery): number {
+  if (!plantId) return 0;
+  const idLower = plantId.trim().toLowerCase();
+  const q = parsed.rawTrimmed;
+
+  if (!q) return 0;
+  if (idLower === q) return 1150;
+
+  // Match partial IDs only when query explicitly looks like a plant ID (contains digits or starts with herb/ta-herb/loc)
+  const looksLikeIdQuery =
+    /\d/.test(q) || q.startsWith('ta-herb') || q.startsWith('herb') || q.startsWith('loc');
+  if (looksLikeIdQuery && q.length >= 2 && idLower.includes(q)) {
+    return 950;
+  }
+
+  return 0;
+}
+
+/**
+ * Computes a relevance score for a medicinal plant against the search query.
+ * Returns 0 if the plant does not match.
+ */
+export function scorePlantSearch(plant: MedicinalPlant, query: string): number {
+  const parsed = parseQuery(query);
+  if (!parsed) return 1;
+
+  let bestScore = 0;
+  const consider = (score: number) => {
+    if (score > bestScore) bestScore = score;
+  };
+
+  // Tier 1: Primary species identity (Vietnamese name, folk names, scientific taxonomy, ID)
+  consider(
+    scoreFieldMatch(plant.vietnameseName, parsed, 1000, {
+      allowPrefixOnLastToken: true,
+      allowPrefixOnLongTokens: true,
+      allowUnorderedTokens: true,
+    })
+  );
+
+  for (const otherName of plant.otherNames || []) {
+    consider(
+      scoreFieldMatch(otherName, parsed, 900, {
+        allowPrefixOnLastToken: true,
+        allowPrefixOnLongTokens: true,
+        allowUnorderedTokens: true,
+      })
+    );
+  }
+
+  consider(scorePlantIdMatch(plant.id, parsed));
+
+  consider(
+    scoreFieldMatch(plant.scientificName, parsed, 800, {
+      allowPrefixOnLastToken: true,
+      allowPrefixOnLongTokens: true,
+      allowUnorderedTokens: true,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(plant.genus, parsed, 760, {
+      allowPrefixOnLastToken: true,
+      allowPrefixOnLongTokens: true,
+      allowUnorderedTokens: false,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(plant.species, parsed, 760, {
+      allowPrefixOnLastToken: true,
+      allowPrefixOnLongTokens: true,
+      allowUnorderedTokens: true,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(plant.family, parsed, 700, {
+      allowPrefixOnLastToken: true,
+      allowPrefixOnLongTokens: true,
+      allowUnorderedTokens: true,
+      minQueryLength: 2,
+    })
+  );
+
+  // Tier 2: Geographic location & habitat
+  consider(
+    scoreFieldMatch(plant.location?.communeSection, parsed, 520, {
+      allowPrefixOnLastToken: parsed.normTokens[parsed.normTokens.length - 1].length >= 2,
+      allowUnorderedTokens: false,
+      minQueryLength: 2,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(plant.location?.addressDescription, parsed, 460, {
+      allowPrefixOnLastToken: parsed.normTokens[parsed.normTokens.length - 1].length >= 2,
+      allowUnorderedTokens: false,
+      minQueryLength: 2,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(getHabitatLabel(plant.habitatCategory), parsed, 420, {
+      allowPrefixOnLastToken: parsed.normTokens[parsed.normTokens.length - 1].length >= 2,
+      allowUnorderedTokens: false,
+      minQueryLength: 2,
+    })
+  );
+
+  consider(
+    scoreFieldMatch(plant.habitat, parsed, 380, {
+      allowPrefixOnLastToken: false,
+      allowUnorderedTokens: false,
+      minQueryLength: 2,
+    })
+  );
+
+  // Tier 3: Traditional remedies, parts used, preparation
+  for (const remedy of plant.traditionalUses?.folkRemedies || []) {
+    consider(
+      scoreFieldMatch(remedy, parsed, 340, {
+        allowPrefixOnLastToken: false,
+        allowUnorderedTokens: true,
+        minQueryLength: 2,
+      })
+    );
+  }
+
+  for (const part of plant.traditionalUses?.partUsed || []) {
+    consider(
+      scoreFieldMatch(part, parsed, 300, {
+        allowPrefixOnLastToken: false,
+        allowUnorderedTokens: false,
+        minQueryLength: 2,
+      })
+    );
+  }
+
+  consider(
+    scoreFieldMatch(plant.traditionalUses?.preparation, parsed, 260, {
+      allowPrefixOnLastToken: false,
+      allowUnorderedTokens: false,
+      minQueryLength: 3,
+    })
+  );
+
+  // Tier 4: Short description (contiguous phrase match only, prevents cross-word noise)
+  consider(
+    scoreFieldMatch(plant.shortDescription, parsed, 220, {
+      allowPrefixOnLastToken: false,
+      allowUnorderedTokens: false,
+      minQueryLength: 3,
+    })
+  );
+
+  // Tier 5: Combined Name + Location cross-field match (e.g. "Cà gai leo Đức Bố")
+  if (bestScore === 0 && parsed.normTokens.length >= 2) {
+    const nameAndLocation = [
+      plant.vietnameseName,
+      ...(plant.otherNames || []),
+      plant.location?.communeSection || '',
+      plant.location?.addressDescription || '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    consider(
+      scoreFieldMatch(nameAndLocation, parsed, 180, {
+        allowPrefixOnLastToken: parsed.normTokens[parsed.normTokens.length - 1].length >= 2,
+        allowUnorderedTokens: true,
+        minQueryLength: 3,
+      })
+    );
+  }
+
+  return bestScore;
+}
+
+/**
+ * Checks if a plant matches the search query accurately.
  */
 export function matchPlantSearch(plant: MedicinalPlant, query: string): boolean {
   if (!query || !query.trim()) return true;
-
-  const rawQuery = query.trim().toLowerCase();
-  const normalizedQuery = removeVietnameseTones(rawQuery);
-  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
-
-  if (queryTokens.length === 0) return true;
-
-  // Build comprehensive searchable text from all plant properties
-  const plantSearchableTexts = [
-    plant.id,
-    plant.vietnameseName,
-    ...(plant.otherNames || []),
-    plant.genus || '',
-    plant.species || '',
-    plant.scientificName,
-    plant.family,
-    plant.habitat,
-    plant.habitatCategory,
-    plant.shortDescription || '',
-    plant.conservationStatus,
-    plant.location?.communeSection || '',
-    plant.location?.addressDescription || '',
-    plant.traditionalUses?.informantName || '',
-    plant.traditionalUses?.informantRole || '',
-    plant.traditionalUses?.preparation || '',
-    ...(plant.traditionalUses?.folkRemedies || []),
-    ...(plant.traditionalUses?.partUsed || []),
-    plant.identificationTraits?.growthForm || '',
-    plant.identificationTraits?.leaves || '',
-    plant.identificationTraits?.flowers || '',
-    plant.identificationTraits?.fruits || '',
-    plant.identificationTraits?.roots || '',
-    plant.dataSource?.surveyor || '',
-    plant.dataSource?.title || '',
-  ].filter(Boolean);
-
-  const fullRawText = plantSearchableTexts.join(' ').toLowerCase();
-  const fullNormalizedText = removeVietnameseTones(fullRawText);
-
-  // 1. Direct raw or normalized substring inclusion (Fast path)
-  if (fullRawText.includes(rawQuery) || fullNormalizedText.includes(normalizedQuery)) {
-    return true;
-  }
-
-  // 2. Token-based matching: Every token in the query must be found in the normalized text
-  const allTokensMatch = queryTokens.every((token) => fullNormalizedText.includes(token));
-  if (allTokensMatch) {
-    return true;
-  }
-
-  // 3. Approximate prefix / partial match for individual tokens
-  const words = fullNormalizedText.split(/[\s,;./()+-]+/).filter(Boolean);
-  const allTokensPartiallyMatch = queryTokens.every((token) => {
-    if (token.length <= 2) {
-      return fullNormalizedText.includes(token);
-    }
-    return words.some((w) => w.includes(token) || token.includes(w));
-  });
-
-  return allTokensPartiallyMatch;
+  return scorePlantSearch(plant, query) > 0;
 }
 
 /**
- * Searches and scores a list of plants based on query relevance.
- * Returns sorted list of matching plants.
+ * Searches and ranks a list of plants based on query relevance.
+ * Returns a sorted list with exact and plant-name matches first.
  */
 export function searchPlants(plants: MedicinalPlant[], query: string): MedicinalPlant[] {
   if (!query || !query.trim()) return plants;
 
-  const rawQuery = query.trim().toLowerCase();
-  const normQuery = removeVietnameseTones(rawQuery);
-
-  const matched = plants.filter((plant) => matchPlantSearch(plant, query));
-
-  // Sort matched plants by relevance:
-  // 1. Exact name match
-  // 2. Name starts with query
-  // 3. Name contains query
-  // 4. Scientific name or family contains query
-  // 5. Traditional uses / other fields contain query
-  return matched.sort((a, b) => {
-    const aNormName = removeVietnameseTones(a.vietnameseName);
-    const bNormName = removeVietnameseTones(b.vietnameseName);
-
-    const aExact = aNormName === normQuery;
-    const bExact = bNormName === normQuery;
-    if (aExact && !bExact) return -1;
-    if (!aExact && bExact) return 1;
-
-    const aStartsWith = aNormName.startsWith(normQuery);
-    const bStartsWith = bNormName.startsWith(normQuery);
-    if (aStartsWith && !bStartsWith) return -1;
-    if (!aStartsWith && bStartsWith) return 1;
-
-    const aIncludes = aNormName.includes(normQuery);
-    const bIncludes = bNormName.includes(normQuery);
-    if (aIncludes && !bIncludes) return -1;
-    if (!aIncludes && bIncludes) return 1;
-
-    return 0;
-  });
+  return plants
+    .map((plant) => ({ plant, score: scorePlantSearch(plant, query) }))
+    .filter((entry) => entry.score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return a.plant.vietnameseName.localeCompare(b.plant.vietnameseName, 'vi');
+    })
+    .map((entry) => entry.plant);
 }
